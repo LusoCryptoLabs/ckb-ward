@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
 import { parseMessage, type MessageFields } from "./message.ts";
 import type { LockRun, MockCell, MockTransaction, RunLock } from "./runner.ts";
-import { proofTemplate } from "./template.ts";
+import { PROOF_INPUT_CAPACITY, proofTemplate } from "./template.ts";
 
 /** What the prover hands in: the lock it claims, the message it was asked to sign, the signed tx. */
 export interface Proof {
@@ -104,6 +104,11 @@ export function mockTransaction(tx: ccc.Transaction, input: MockCell, cellDeps: 
   };
 }
 
+/** The proof input as the verifier resolves it: capacity u64::MAX, the claimed lock, no type, no data. */
+export function proofInput(lock: ccc.ScriptLike): MockCell {
+  return { output: { capacity: ccc.numToHex(PROOF_INPUT_CAPACITY), lock: JsonRpcTransformers.scriptFrom(lock), type: null }, data: "0x", header: null };
+}
+
 function checkExpect(f: MessageFields, e: Expect | undefined): string | undefined {
   if (!e) return undefined;
   if (e.domain !== undefined && f.domain !== e.domain) return "message is for another domain";
@@ -144,7 +149,6 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
   if (fields.chain !== (await rpc("get_block_hash", ["0x0"]))) return fail("message names another chain");
 
   const template = proofTemplate(lock, proof.message);
-  const input: MockCell = { output: { capacity: "0x0", lock: JsonRpcTransformers.scriptFrom(lock), type: null }, data: "0x", header: null };
   template.cellDeps = tx.cellDeps.map((d) => d.clone());
   if (template.hash() !== tx.hash()) return fail("not the proof template for this lock and message");
 
@@ -155,7 +159,7 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
     if (e instanceof NotLiveError) return fail(`cell dep ${e.message}`);
     throw e;
   }
-  const run = await options.runLock(mockTransaction(tx, input, deps));
+  const run = await options.runLock(mockTransaction(tx, proofInput(lock), deps));
   if (run.code === 0) return { ok: true, fields, cycles: run.cycles };
   if (run.code === null) return fail(`lock did not run: ${run.output.split("\n").at(-1)}`, run);
   return fail(`lock exited ${run.code}`, run);

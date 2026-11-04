@@ -1,11 +1,12 @@
 export { MAX_MESSAGE_BYTES, message, parseMessage, type MessageFields, type MessageInput } from "./message.ts";
-export { NULL_LOCK, PROOF_INDEX, PROOF_TAG, proofOutPoint, proofTemplate } from "./template.ts";
+export { NULL_LOCK, PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG, proofOutPoint, proofTemplate } from "./template.ts";
 export {
   CLOCK_SKEW_SECONDS,
   MAX_CELL_DEPS,
   NotLiveError,
   jsonRpc,
   mockTransaction,
+  proofInput,
   resolveCellDeps,
   verify,
   type Expect,

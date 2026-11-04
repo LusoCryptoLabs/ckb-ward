@@ -3,8 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
-import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
-import { mockTransaction, proofTemplate, resolveCellDeps, verify, type MockTransaction, type VerifyResult } from "../src/index.ts";
+import { mockTransaction, proofInput, proofTemplate, resolveCellDeps, verify, type MockTransaction, type VerifyResult } from "../src/index.ts";
 import { NO_NETWORK, NO_VM, RPC_URL, flipWitnessByte, otherMessage, poolAccept, runLock, vectors, type Vector } from "./helpers.ts";
 
 const opts = () => ({ rpcUrl: RPC_URL, runLock: runLock! });
@@ -12,8 +11,7 @@ const show = (r: VerifyResult) => (r.ok ? `ACCEPTED, cycles ${r.cycles}` : `REFU
 
 /** Runs the lock on a transaction directly, skipping the verifier's template check. */
 async function runRaw(v: Vector, tx: ccc.Transaction, deps?: MockTransaction["mock_info"]["cell_deps"]) {
-  const input = { output: { capacity: "0x0", lock: JsonRpcTransformers.scriptFrom(v.lock), type: null }, data: "0x", header: null as null };
-  return runLock!(mockTransaction(tx, input, deps ?? (await resolveCellDeps(RPC_URL, tx.cellDeps))));
+  return runLock!(mockTransaction(tx, proofInput(v.lock), deps ?? (await resolveCellDeps(RPC_URL, tx.cellDeps))));
 }
 
 for (const v of vectors) {

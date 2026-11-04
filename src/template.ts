@@ -8,6 +8,12 @@ import { ccc } from "@ckb-ccc/core";
 export const PROOF_TAG = "CKB lock proof v0\n";
 /** Output index of the proof out point. No transaction has 2^32 - 1 outputs. */
 export const PROOF_INDEX = 0xffffffff;
+/**
+ * Capacity of the proof input as the verifier resolves it: u64::MAX. A lock that limits what a key
+ * may move (a per-transaction cap) then sees the whole account leave, so only a key that may move
+ * everything can sign a proof. The signed transaction hash does not cover resolved input cells.
+ */
+export const PROOF_INPUT_CAPACITY = 0xffffffffffffffffn;
 /** Lock of the proof output. Output locks never run; the output only carries the message. */
 export const NULL_LOCK = ccc.Script.from({ codeHash: `0x${"00".repeat(32)}`, hashType: "data", args: "0x" });
 
@@ -22,8 +28,9 @@ export function proofOutPoint(lock: ccc.ScriptLike, message: string): ccc.OutPoi
 
 /**
  * The proof transaction: one input at an out point that cannot exist, one output under NULL_LOCK
- * holding the message. Cell deps and witnesses are the wallet's to fill. The input carries its
- * resolved cell (the lock, no type, no data) so signers can compute the sighash without the chain.
+ * holding the message. Cell deps and witnesses are the wallet's to fill. The input carries the cell
+ * the verifier resolves it to (capacity u64::MAX, the lock, no type, no data), so signers can
+ * compute the sighash without the chain and see what the lock will see.
  */
 export function proofTemplate(lock: ccc.ScriptLike, message: string): ccc.Transaction {
   const script = ccc.Script.from(lock);
@@ -33,7 +40,7 @@ export function proofTemplate(lock: ccc.ScriptLike, message: string): ccc.Transa
     version: 0,
     cellDeps: [],
     headerDeps: [],
-    inputs: [{ previousOutput: proofOutPoint(script, message), since: 0, cellOutput: { capacity: 0, lock: script }, outputData: "0x" }],
+    inputs: [{ previousOutput: proofOutPoint(script, message), since: 0, cellOutput: { capacity: PROOF_INPUT_CAPACITY, lock: script }, outputData: "0x" }],
     outputs: [{ capacity, lock: NULL_LOCK }],
     outputsData: [ccc.hexFrom(data)],
     witnesses: [],
