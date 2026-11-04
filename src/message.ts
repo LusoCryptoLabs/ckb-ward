@@ -29,7 +29,12 @@ export const MAX_MESSAGE_BYTES = 1024;
 
 const HEADER = " wants you to prove control of a CKB lock.";
 const DOMAIN = /^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?$/;
-const ACCOUNT = /^[^\u0000-\u001f\u007f]{1,256}$/u;
+/**
+ * Printable ASCII, 1 to 256 characters, no space at either end. Anything wider lets an account
+ * name hide or reorder text where a wallet shows it: U+2028 breaks a line, U+202E turns text
+ * around, C1 controls such as U+0085 act as line feeds in some views.
+ */
+const ACCOUNT = /^[\x21-\x7e](?:[\x20-\x7e]{0,254}[\x21-\x7e])?$/;
 const HASH = /^0x[0-9a-f]{64}$/;
 const TIME = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z$/;
 const NONCE = /^[A-Za-z0-9._~-]{1,128}$/;

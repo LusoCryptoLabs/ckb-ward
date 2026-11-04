@@ -47,3 +47,14 @@ test("malformed messages are refused", () => {
   for (const text of bad) assert.throws(() => parseMessage(text), Error, JSON.stringify(text.slice(-40)));
   assert.throws(() => message({ ...input, account: "two\nlines" }));
 });
+
+test("account: printable ASCII only, no space at either end", () => {
+  const at = (account: string) => () => message({ ...input, account });
+  const cp = (n: number) => String.fromCodePoint(n);
+  // Line separator, right-to-left override, a C1 control, a non-ASCII letter, edge spaces, too long.
+  for (const bad of [`a${cp(0x2028)}b`, `a${cp(0x202e)}b`, `a${cp(0x85)}b`, `caf${cp(0xe9)}`, " a", "a ", "", "x".repeat(257)]) {
+    assert.throws(at(bad), /bad account/, JSON.stringify(bad));
+    assert.throws(() => parseMessage(message(input).replace("Account: user-42", `Account: ${bad}`)), Error, JSON.stringify(bad));
+  }
+  for (const good of ["a", "user 42", "~!@#$%^&*()_+{}|:<>?", "x".repeat(256)]) assert.equal(parseMessage(message({ ...input, account: good })).account, good);
+});
