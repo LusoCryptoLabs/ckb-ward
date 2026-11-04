@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
-import { jsonRpc, mockTransaction, resolveCellDeps, templateA, templateB, verify, type MockTransaction, type VerifyResult } from "../src/index.ts";
+import { mockTransaction, proofTemplate, resolveCellDeps, verify, type MockTransaction, type VerifyResult } from "../src/index.ts";
 import { NO_NETWORK, NO_VM, RPC_URL, flipWitnessByte, otherMessage, poolAccept, runLock, vectors, type Vector } from "./helpers.ts";
 
 const opts = () => ({ rpcUrl: RPC_URL, runLock: runLock! });
@@ -12,18 +12,12 @@ const show = (r: VerifyResult) => (r.ok ? `ACCEPTED, cycles ${r.cycles}` : `REFU
 
 /** Runs the lock on a transaction directly, skipping the verifier's template check. */
 async function runRaw(v: Vector, tx: ccc.Transaction, deps?: MockTransaction["mock_info"]["cell_deps"]) {
-  let input;
-  if (v.variant === "A") {
-    input = { output: { capacity: "0x0", lock: JsonRpcTransformers.scriptFrom(v.lock), type: null }, data: "0x", header: null as null };
-  } else {
-    const r = await jsonRpc(RPC_URL)("get_live_cell", [JsonRpcTransformers.outPointFrom(tx.inputs[0].previousOutput), true]);
-    input = { output: r.cell.output, data: r.cell.data.content, header: null as null };
-  }
+  const input = { output: { capacity: "0x0", lock: JsonRpcTransformers.scriptFrom(v.lock), type: null }, data: "0x", header: null as null };
   return runLock!(mockTransaction(tx, input, deps ?? (await resolveCellDeps(RPC_URL, tx.cellDeps))));
 }
 
 for (const v of vectors) {
-  const proof = { lock: v.lock, message: v.message, tx: v.tx, variant: v.variant };
+  const proof = { lock: v.lock, message: v.message, tx: v.tx };
 
   test(`${v.name}: accepted`, { skip: NO_VM }, async (t) => {
     const r = await verify(proof, opts());
@@ -39,7 +33,7 @@ for (const v of vectors) {
     // The lock refuses it as well: the same witness on the other message's template.
     const tx = ccc.Transaction.from(v.tx);
     const other = otherMessage(v.message);
-    const tpl = v.variant === "A" ? templateA(v.lock, other) : templateB(v.inputCell!, other);
+    const tpl = proofTemplate(v.lock, other);
     tpl.cellDeps = tx.cellDeps;
     tpl.witnesses = tx.witnesses;
     const raw = await runRaw(v, tpl);
@@ -75,22 +69,14 @@ for (const v of vectors) {
   test(`${v.name}: the node refuses the signed proof`, { skip: NO_NETWORK }, async (t) => {
     const e = await poolAccept(v.tx);
     t.diagnostic(e);
-    assert.match(e, v.variant === "A" ? /Unknown\(OutPoint\(0x[0-9a-f]{64}ffffffff\)\)/ : /Immature/);
+    assert.match(e, /Unknown\(OutPoint\(0x[0-9a-f]{64}ffffffff\)\)/);
   });
-
-  if (v.variant === "B") {
-    test(`${v.name}: the node gives the same answer for a broken signature`, { skip: NO_NETWORK }, async (t) => {
-      const e = await poolAccept(flipWitnessByte(v.tx, v.signatureByte));
-      t.diagnostic(e);
-      assert.match(e, /Immature/);
-    });
-  }
 }
 
 test("a message for another chain is refused", { skip: NO_NETWORK }, async () => {
-  const v = vectors.find((x) => x.file === "secp256k1-a.json")!;
+  const v = vectors.find((x) => x.file === "secp256k1.json")!;
   const mainnet = "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5";
   const message = v.message.replace(/\nChain: 0x[0-9a-f]{64}/, `\nChain: ${mainnet}`);
-  const r = await verify({ lock: v.lock, message, tx: v.tx, variant: "A" }, opts());
+  const r = await verify({ lock: v.lock, message, tx: v.tx }, opts());
   assert.deepEqual(r, { ok: false, reason: "message names another chain", run: undefined });
 });

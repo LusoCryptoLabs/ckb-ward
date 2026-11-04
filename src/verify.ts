@@ -1,17 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
-import { JsonRpcTransformers, type JsonRpcCellOutput } from "@ckb-ccc/core/advanced";
+import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
 import { parseMessage, type MessageFields } from "./message.ts";
 import type { LockRun, MockCell, MockTransaction, RunLock } from "./runner.ts";
-import { templateA, templateB } from "./template.ts";
-
-export type Variant = "A" | "B";
+import { proofTemplate } from "./template.ts";
 
 /** What the prover hands in: the lock it claims, the message it was asked to sign, the signed tx. */
 export interface Proof {
   lock: ccc.ScriptLike;
   message: string;
   tx: ccc.TransactionLike;
-  variant: Variant;
 }
 
 /** Message checks that depend on the platform. maxAgeSeconds is measured from "Issued at". */
@@ -137,7 +134,6 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
   } catch (e) {
     return fail(`malformed proof: ${text(e)}`);
   }
-  if (proof.variant !== "A" && proof.variant !== "B") return fail("unknown variant");
   if (fields.lockHash !== lock.hash()) return fail("message names another lock");
   const expectError = checkExpect(fields, options.expect);
   if (expectError) return fail(expectError);
@@ -147,31 +143,8 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
   const rpc = jsonRpc(options.rpcUrl);
   if (fields.chain !== (await rpc("get_block_hash", ["0x0"]))) return fail("message names another chain");
 
-  let template: ccc.Transaction;
-  let input: MockCell;
-  if (proof.variant === "A") {
-    template = templateA(lock, proof.message);
-    input = { output: { capacity: "0x0", lock: JsonRpcTransformers.scriptFrom(lock), type: null }, data: "0x", header: null };
-  } else if (proof.variant === "B") {
-    if (tx.inputs.length !== 1) return fail("not the proof template for this lock and message");
-    const outPoint = tx.inputs[0].previousOutput;
-    try {
-      input = await liveCell(rpc, outPoint);
-    } catch (e) {
-      if (e instanceof NotLiveError) return fail(`input ${e.message}`);
-      throw e;
-    }
-    const cell = ccc.Cell.from({ outPoint, cellOutput: JsonRpcTransformers.cellOutputTo(input.output as JsonRpcCellOutput), outputData: input.data });
-    if (!cell.cellOutput.lock.eq(lock)) return fail("input is not under the claimed lock");
-    try {
-      template = templateB(cell, proof.message);
-    } catch (e) {
-      return fail(text(e));
-    }
-  } else {
-    throw new Error("unreachable");
-  }
-
+  const template = proofTemplate(lock, proof.message);
+  const input: MockCell = { output: { capacity: "0x0", lock: JsonRpcTransformers.scriptFrom(lock), type: null }, data: "0x", header: null };
   template.cellDeps = tx.cellDeps.map((d) => d.clone());
   if (template.hash() !== tx.hash()) return fail("not the proof template for this lock and message");
 

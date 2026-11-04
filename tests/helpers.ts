@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
-import { ckbDebugger, type RunLock, type Variant } from "../src/index.ts";
+import { ckbDebugger, type RunLock } from "../src/index.ts";
 
 export interface Control {
   about: string;
@@ -15,11 +15,9 @@ export interface Vector {
   file: string;
   name: string;
   about: string;
-  variant: Variant;
   lock: ccc.ScriptLike;
   message: string;
   tx: ccc.TransactionLike;
-  inputCell?: ccc.CellLike;
   /** Offset in witness 0 of a byte inside the signature. */
   signatureByte: number;
   /** Exit code of the lock for the same witness on another message's template. */

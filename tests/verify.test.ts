@@ -9,9 +9,9 @@ const never: RunLock = async () => {
   throw new Error("the lock must not run");
 };
 const opts = { rpcUrl: "http://127.0.0.1:1/unreachable", runLock: never };
-const v = vectors.find((x) => x.file === "secp256k1-a.json")!;
-const other = vectors.find((x) => x.file === "joyid-a.json")!;
-const proof = { lock: v.lock, message: v.message, tx: v.tx, variant: "A" as const };
+const v = vectors.find((x) => x.file === "secp256k1.json")!;
+const other = vectors.find((x) => x.file === "joyid.json")!;
+const proof = { lock: v.lock, message: v.message, tx: v.tx };
 
 const reason = async (p: Parameters<typeof verify>[0], o: Parameters<typeof verify>[1] = opts) => {
   const r = await verify(p, o);
@@ -40,7 +40,6 @@ test("a second witness", async () => {
   assert.equal(await reason({ ...proof, tx }), "exactly one witness expected");
 });
 
-test("an unknown variant and a malformed message", async () => {
-  assert.equal(await reason({ ...proof, variant: "C" as "A" }), "unknown variant");
+test("a malformed message", async () => {
   assert.match(await reason({ ...proof, message: v.message + "\n" }), /^malformed proof/);
 });

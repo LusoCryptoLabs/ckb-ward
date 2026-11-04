@@ -1,7 +1,6 @@
 {
- "name": "secp256k1, variant A",
+ "name": "secp256k1",
  "about": "Default CKB lock (secp256k1_blake160_sighash_all). Random key made for the test, signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-04.",
- "variant": "A",
  "lock": {
   "codeHash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
   "hashType": "type",

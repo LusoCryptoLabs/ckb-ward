@@ -1,7 +1,6 @@
 {
- "name": "JoyID, variant A, real app",
+ "name": "JoyID, real app",
  "about": "JoyID app on testnet (testnet.joyid.dev), main key, through @ckb-ccc/joy-id 1.2.6 CkbSigner.signOnlyTransaction. 2026-11-04.",
- "variant": "A",
  "lock": {
   "codeHash": "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac",
   "hashType": "type",

@@ -14,17 +14,16 @@ Running the lock itself needs neither. Any wallet that can sign an ordinary tran
 
 ## How it works
 
-- **Variant A.** The only input points at an out point that cannot exist: `tx_hash = ckbhash("CKB lock proof v0\n" || lock hash || message)`, `index = 0xffffffff`. The verifier resolves it to `{ capacity 0, the claimed lock }`. One output under an all-zero lock carries the message.
-- **Variant B**, for wallets that look inputs up on chain. A real live cell of the lock is the only input, with `since` = absolute block 2^56 - 1, which the chain will not reach. One output returns the cell to the same lock, minus a 0.001 CKB fee, with `ckbhash(message)` as data.
+- The only input points at an out point that cannot exist: `tx_hash = ckbhash("CKB lock proof v0\n" || lock hash || message)`, `index = 0xffffffff`. The verifier resolves it to `{ capacity 0, the claimed lock }`. One output under an all-zero lock carries the message.
 - The message names the platform, the account, the lock hash, the chain's genesis hash, the time and a single-use nonce.
 
-Nodes refuse both: variant A as `Unknown(OutPoint)`, variant B as `Immature`. So a node cannot verify a proof either; the verifier needs a VM.
+Nodes refuse it as `Unknown(OutPoint)`. So a node cannot verify a proof either; the verifier needs a VM.
 
 ## Use
 
 ```ts
 import { ccc } from "@ckb-ccc/core";
-import { ckbDebugger, message, templateA, verify } from "ckb-lock-proof";
+import { ckbDebugger, message, proofTemplate, verify } from "ckb-lock-proof";
 
 // Platform: write the message.
 const text = message({
@@ -37,13 +36,13 @@ const text = message({
 });
 
 // Wallet: sign the template like any transaction (any CCC signer).
-let tx = templateA(lock, text);
+let tx = proofTemplate(lock, text);
 tx = await signer.prepareTransaction(tx);
 tx = await signer.signOnlyTransaction(tx);
 
 // Platform: verify.
 const result = await verify(
-  { lock, message: text, tx, variant: "A" },
+  { lock, message: text, tx },
   {
     rpcUrl: "https://testnet.ckb.dev/rpc",
     runLock: ckbDebugger(),
@@ -52,8 +51,6 @@ const result = await verify(
 );
 // { ok: true, fields, cycles } or { ok: false, reason, run? }
 ```
-
-For variant B, build the template with `templateB(cell, text)`, where `cell` is a live cell of the lock (a plain cell with no type and no data is the simplest), and pass `variant: "B"`.
 
 `verify` refuses when the message is malformed or names another lock or chain, when the transaction is not exactly the template the verifier builds, when a cell dep is not live on the chain, or when the lock exits non-zero. It throws only when the node cannot be reached or the runner cannot start.
 
@@ -77,7 +74,7 @@ npm run typecheck
 npm test
 ```
 
-`tests/vectors/` holds real signed proofs from testnet: secp256k1, the JoyID app (both variants) and the Cellula smart-account lock (starter and guarded). Each is replayed with controls that must be refused: another message, one flipped signature bit, a wrong key, a missing or forged settings cell dep, and `test_tx_pool_accept` on the node.
+`tests/vectors/` holds real signed proofs from testnet: secp256k1, the JoyID app and the Cellula smart-account lock (starter and guarded). Each is replayed with controls that must be refused: another message, one flipped signature bit, a wrong key, a missing or forged settings cell dep, and `test_tx_pool_accept` on the node.
 
 Without configuration, tests that run a lock are skipped. Set `CKB_DEBUGGER` (the executable) and, on Windows, `CKB_DEBUGGER_WSL` (the WSL distro that has it). Set `CKB_LOCK_PROOF_OFFLINE=1` to skip everything that needs the testnet RPC (`CKB_RPC_URL` overrides it).
 
@@ -87,7 +84,7 @@ CKB_DEBUGGER=ckb-debugger npm test
 MSYS_NO_PATHCONV=1 CKB_DEBUGGER_WSL=Ubuntu CKB_DEBUGGER=/root/.cargo/bin/ckb-debugger npm test
 ```
 
-The vectors depend on testnet cell deps staying live, and the variant B vector also on its input cell.
+The vectors depend on testnet cell deps staying live.
 
 ## Status
 

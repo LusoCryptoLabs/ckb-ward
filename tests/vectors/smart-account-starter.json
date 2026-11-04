@@ -1,7 +1,6 @@
 {
- "name": "Cellula smart account (starter), variant A",
+ "name": "Cellula smart account (starter)",
  "about": "Cellula smart-account lock v6 on testnet, starter form (args 0x01 0xfe blake160(key)). Software P-256 key signing in the wallet's WebAuthn shape. 2026-11-04.",
- "variant": "A",
  "lock": {
   "codeHash": "0x8f73d5d875b70c248c281052c9f67e2d7a2dbbee47a1ae71e68f44fed47b436e",
   "hashType": "type",
