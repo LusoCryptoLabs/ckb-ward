@@ -1,6 +1,8 @@
-# CKB lock proof, v0
+# CKB lock proof, v1
 
 Status: draft. Prototype, tested on testnet only, not audited.
+
+v1 replaces the v0 draft after two reviews. Variant B is gone (section 14). The verifier resolves the proof input with capacity u64::MAX, runs two "no exclusive control" probes, and bounds its own work. Platforms get normative rules (section 9). The bytes a wallet signs for the remaining template did not change, so every v0 variant A proof is a v1 proof, and the domain tag stays `CKB lock proof v0\n` (section 4).
 
 ## 1. Purpose
 
@@ -10,19 +12,23 @@ On CKB a lock is a program. A verifier that checks one signature scheme (secp256
 
 This spec follows BIP-322: the prover signs a transaction that can never be committed, and the verifier runs the claimed lock on it. Every wallet that can sign an ordinary transaction for its lock can produce a proof, and one verifier handles every lock that signs the transaction hash.
 
-A valid proof means: at verification time, the prover could produce a witness that makes the lock accept a transaction that commits to the message. It says nothing about type scripts and nothing about who controls the lock later.
+What a valid proof shows: at verification time, some key (or set of keys) able to authorize the template, which moves the input's whole u64::MAX capacity away from the lock, produced a witness that makes the lock accept a transaction committing to the message. It does not show who holds that key, that they will keep it, or anything about type scripts.
 
 ## 2. Terms
 
 - **ckbhash**: BLAKE2b-256 with personalization `ckb-default-hash`, the hash CKB uses for transaction and script hashes.
 - **lock hash**: ckbhash of the molecule-serialized `Script`.
 - **prover**: the person (and their wallet) who claims control of the lock.
-- **verifier**: the platform's code that checks the proof.
+- **verifier**: the code that checks the proof.
+- **platform**: the service that issues messages, runs the verifier and keeps bindings.
+- **binding**: a platform's record that links a lock to one of its accounts.
 - 1 CKB = 10^8 shannons.
+
+MUST, MUST NOT, SHOULD and MAY in sections 5 to 10 are normative.
 
 ## 3. Message
 
-The verifier writes the message; the prover signs it as part of a transaction. UTF-8, lines separated by a single LF (0x0a), no trailing LF, at most 1024 bytes, exactly six lines:
+The platform writes the message; the prover signs it as part of a transaction. UTF-8, lines separated by a single LF (0x0a), no trailing LF, at most 1024 bytes, exactly six lines:
 
 ```text
 {domain} wants you to prove control of a CKB lock.
@@ -35,18 +41,18 @@ Nonce: {nonce}
 
 | Field | Format | Why |
 | --- | --- | --- |
-| domain | host name of the platform, optional `:port`; letters, digits, `.` and `-` | A proof made for one platform is refused by another, because each verifier checks its own domain. Where the wallet shows the message, it also tells the user who is asking. |
-| account | 1 to 256 characters, no control characters | Binds the proof to the account the lock is being linked to. A proof captured for account A cannot link the lock to account B. |
+| domain | host name of the platform, optional `:port`; letters, digits, `.` and `-` | A proof made for one platform is refused by another, because each verifier checks its own domain. Where the wallet shows the message, it also tells the user who is asking (section 10). |
+| account | 1 to 256 printable ASCII characters (0x20 to 0x7e), no space at either end | Binds the proof to the account the lock is being linked to. A proof captured for account A cannot link the lock to account B. ASCII only, so an account name cannot carry a line break (U+2028), a right-to-left override (U+202E), a C1 control (U+0085) or look-alike letters into the text a wallet shows. |
 | lock hash | `0x` and 64 lowercase hex digits, the lock hash of the claimed lock | Lets the user see which lock is being proven. The verifier checks it equals the claimed lock's hash. |
 | chain | `0x` and 64 lowercase hex digits, the genesis block hash | The same lock exists on every chain (a secp256k1 key has the same lock on testnet and mainnet). Without this a testnet proof would also be a mainnet proof. Testnet: `0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606`. Mainnet: `0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5`. |
 | issued at | RFC 3339 in UTC with `Z`, optional fraction of a second, e.g. `2026-11-04T18:00:00Z` | The verifier refuses old proofs (section 8). |
-| nonce | 1 to 128 characters from `A-Z a-z 0-9 . _ ~ -` | Chosen by the verifier, used once. A replayed proof is refused. Verifiers should use at least 64 random bits. |
+| nonce | 1 to 128 characters from `A-Z a-z 0-9 . _ ~ -` | Chosen by the platform, used once (section 9). Platforms use at least 64 random bits. |
 
 The first line follows the shape of EIP-4361 (Sign-In with Ethereum) so it reads the same way to users who have seen that.
 
-## 4. Variant A: an input that cannot exist
+## 4. Proof transaction
 
-The preferred variant. The only input points at an out point that no transaction can create.
+The only input points at an out point that no transaction can create.
 
 ```text
 TAG = "CKB lock proof v0\n"                    (18 bytes, ASCII, ends with LF)
@@ -64,129 +70,167 @@ n   = byte length of the message
 | outputs_data | exactly one: the message bytes |
 | witnesses | exactly one: what the lock needs, as the wallet writes it (usually a `WitnessArgs` with the signature in `lock`) |
 
-The input cell is resolved **by the verifier** to `{ capacity: 0, lock: the claimed lock, type: none, data: empty }`. The prover never supplies it.
+The input cell is resolved **by the verifier** to `{ capacity: 0xffffffffffffffff (u64::MAX), lock: the claimed lock, type: none, data: empty }`. The prover never supplies it. The template carries the same cell locally, so a signer computes the sighash without the chain and sees what the lock will see.
 
 Why these values:
 
 - **index 0xffffffff.** No transaction can have 2^32 - 1 outputs within the block size limit, so the out point cannot exist. Nodes refuse the signed proof with `Unknown(OutPoint(...))` (measured with `test_tx_pool_accept` and `estimate_cycles`).
 - **P commits to the tag, the lock and the message.** The tag keeps P apart from any real transaction hash. Another lock or another message gives another transaction, so a signature cannot be moved between them.
+- **The tag is versioned and kept.** It names the bytes of the signed transaction. v1 did not change them, so the tag stays `CKB lock proof v0\n` and v0 proofs keep their hashes. A later change to the signed bytes gets a new tag.
+- **input capacity u64::MAX.** Some locks limit what a key may move in one transaction. The Cellula smart-account lock v6 lets the owner add keys with a per-transaction cap and counts as outflow what leaves the account. v0 resolved the input with capacity 0, so the outflow was only the (41 + n) CKB output, and a key capped at 1,000 CKB could prove the whole account (measured: exit 0). At u64::MAX the same key exits 27, over its cap, and a key with no cap exits 0 (measured, `tests/capped-key.test.ts`). The transaction hash covers out points, not the cells they resolve to, so no signed byte changed: every v0 vector verifies unchanged.
 - **output capacity (41 + n) CKB.** That is the output's occupied capacity: 8 bytes of capacity, 32 of code hash, 1 of hash type, no args, then the data. CCC 1.19 and later raises an output below its occupied capacity to that value while building a transaction, so wallets built on CCC produce this value whatever the template said. The spec fixes it so every implementation builds the same bytes. Measured: the JoyID app signed a 329 CKB output for a 288 byte message.
 - **output lock with an all-zero code hash.** Output locks never run. The output exists so wallets that show outputs show the message.
 
-Signing. The wallet signs as it would any transaction spending a cell under the lock. A signer that needs the input cell (to size the witness placeholder or to find the lock) gets it from the template: CCC's `CellInput` carries `cellOutput` and `outputData` locally. A wallet that insists on looking up inputs on chain cannot sign variant A and uses variant B.
+Signing. The wallet signs as it would any transaction spending a cell under the lock. A signer that needs the input cell (to size the witness placeholder or to find the lock) gets it from the template: CCC's `CellInput` carries `cellOutput` and `outputData` locally. A wallet that insists on looking up inputs on chain cannot sign the proof. The JoyID app signs it (vector V2).
 
-## 5. Variant B: a real input that cannot be spent yet
+## 5. Verifier algorithm
 
-The fallback for wallets that resolve inputs from the chain. The prover picks a live cell C under the claimed lock.
+Input: the claimed lock L, the message M, the signed transaction T, and the platform's expectation E: the exact message it issued for this nonce, its own domain, the account, the nonce, the chain's genesis hash from its config, and the age window. Every field of E is required. The verifier has a node RPC for its chain and a CKB-VM runner. Any refusal ends the check. Node errors mean "could not verify", not "refused". Steps 1 to 7 read nothing from the chain.
 
-| Field | Value |
-| --- | --- |
-| version | 0 |
-| cell_deps | whatever the lock needs, chosen by the wallet |
-| header_deps | empty |
-| inputs | exactly one: `previous_output = ` out point of C, `since = 0x00ffffffffffffff` |
-| outputs | exactly one: `capacity = C.capacity - 100000` shannons, `lock = ` the claimed lock, no type |
-| outputs_data | exactly one: ckbhash(message), 32 bytes |
-| witnesses | exactly one, as in variant A |
+1. Refuse when E or any field of it is missing.
+2. Parse M (section 3). Refuse when malformed.
+3. Refuse unless M equals E's message byte for byte.
+4. Refuse unless the lock hash line equals the lock hash of L.
+5. Refuse unless the domain, account, nonce and chain lines equal E's, `now - issued at` is within E's window, and `issued at` is not more than 60 seconds ahead of `now`.
+6. Refuse unless T has exactly one witness, T's serialized size in a block (its bytes plus 4) is at most 597,000, the witness is at most 65,536 bytes, T lists at most 16 cell deps, and no out point appears twice among them (section 7).
+7. Build the template of section 4 from (L, M) and copy T's cell deps into it. Refuse unless its transaction hash equals T's. The transaction hash covers every field but the witnesses, so this one comparison checks every value in section 4.
+8. Claim the nonce (section 9, rule 3). Refuse when it was already used.
+9. Refuse unless the node's genesis hash (`get_block_hash(0)`) equals E's chain.
+10. Read every cell dep of T from the node as a live cell with data. For each dep group, read the member count from its data (an `OutPointVec`: a 4 byte count, then 36 bytes per out point). Refuse when the data is not that shape, or when all groups together list more than 32 cells, before reading any member. Then read each member not already read, as a live cell. Refuse when any cell is not live. Each read has a timeout.
+11. Run the lock script group of input 0 in CKB-VM with T, the resolved input and the resolved deps, under a cycle limit. Refuse unless the lock exits 0.
+12. Probe for exclusive control (section 6, rule 4). Run the lock again on (a) T with its witness replaced by an empty one, and (b) the template of M', which is M with the nonce replaced by a fresh random value, with T's cell deps and T's witness. Refuse when either exits 0.
+13. Accept, and return the out points read in step 10. The binding records them (section 9, rule 8).
 
-C must hold at least `(8 + 33 + args length + 32) * 10^8 + 100000` shannons so the output keeps its occupied capacity. The verifier reads C from the chain as a live cell and refuses when its lock is not the claimed lock.
+## 6. Safety rules
 
-Why these values:
+Each rule was found while building or reviewing this. A verifier that breaks one accepts proofs it should refuse.
 
-- **since 0x00ffffffffffffff.** Flags 0x00 mean an absolute block number. The value is 2^56 - 1, a block the chain will not reach (more than 10^10 years at current block times). Nodes refuse the signed proof as `Immature` (measured). In JSON RPC form it is written `0xffffffffffffff`, because JSON RPC numbers have no leading zeros; ckb-debugger refuses `0x00ffffffffffffff`.
-- **fee of 0.001 CKB.** With no fee the node refused the proof for its fee rate first (`PoolRejectedTransactionByMinFeeRate`, measured), so the since was never the reason given. With the fee, the reason is `Immature`. To the wallet it looks like an ordinary transfer to itself.
-- **data = ckbhash(message).** The message is bound to the signature through the transaction hash. Only its hash is on the transaction, so a wallet cannot show the text.
-
-Cost and risk. The prover signs a real spend of C, which the since keeps off chain. If C is spent before the verifier checks the proof, the proof is refused (input not live) and the prover signs a new one. Verifying variant B proves nothing extra about C: the platform should read the chain for the cells it counts.
-
-## 6. Verifier algorithm
-
-Input: the claimed lock L, the message M, the signed transaction T, the variant V. The verifier has a node RPC for its chain and a CKB-VM runner. Any refusal ends the check. Node errors mean "could not verify", not "refused".
-
-1. Parse M (section 3). Refuse when malformed.
-2. Refuse unless V is A or B.
-3. Refuse unless the lock hash line equals the lock hash of L.
-4. Platform checks: domain is the verifier's own; account is the account being linked; nonce is one the verifier issued for that account and has not seen used; `now - issued at` is within the verifier's window and `issued at` is not more than 60 seconds ahead of `now`.
-5. Refuse unless T has exactly one witness and at most 16 cell deps (JoyID, the largest measured, uses 5).
-6. Refuse unless the chain line equals the node's genesis hash (`get_block_hash(0)`).
-7. Build the template, and the resolved input cell:
-   - A: the template of section 4 from (L, M). The input cell is `{ capacity 0, L, no type, no data }`.
-   - B: refuse unless T has exactly one input. Read that input's out point from the node as a live cell with data (`get_live_cell`). Refuse when it is not live or its lock is not L. Build the template of section 5 from that cell and M. The input cell is the live cell.
-8. Copy T's cell deps into the template. Refuse unless the template's transaction hash equals T's. The transaction hash covers every field but the witnesses, so this one comparison checks every value in sections 4 and 5.
-9. Read every cell dep of T from the node as a live cell with data. For a dep group, decode its data as an `OutPointVec` and read each member as a live cell too. Refuse when any is not live.
-10. Run the lock script group of input 0 in CKB-VM with T, the resolved input and the resolved deps, under a cycle limit.
-11. Accept when the lock exits 0. Then mark the nonce used and record (account, lock hash, chain, time).
-
-## 7. Safety rules
-
-Two rules found while building this. A verifier that breaks either accepts proofs it should refuse.
-
-**Rule 1: cell deps come from the chain as live cells, never from the prover.** A lock's behaviour depends on its deps. For a lock with `hash_type` type, the code is found by type script hash, so a forged dep can carry any code. Some locks also read settings from deps. Measured with the Cellula smart-account lock, whose guarded form reads its authenticators from a Config Cell given as a cell dep: a proof signed by a key that is not an authenticator, sent with a forged copy of the Config Cell that lists that key, is **accepted** by the lock (exit 0) when the verifier uses the prover's copy. Read from the chain, the forged out point is not live and the proof is refused (vector V5, `forgedConfig`).
+**Rule 1: cell deps come from the chain as live cells, never from the prover.** A lock's behaviour depends on its deps. For a lock with `hash_type` type, the code is found by type script hash, so a forged dep can carry any code. Some locks also read settings from deps. Measured with the Cellula smart-account lock, whose guarded form reads its authenticators from a Config Cell given as a cell dep: a proof signed by a key that is not an authenticator, sent with a forged copy of the Config Cell that lists that key, is **accepted** by the lock (exit 0) when the verifier uses the prover's copy. Read from the chain, the forged out point is not live and the proof is refused (vector V4, `forgedConfig`).
 
 **Rule 2: the verifier builds the template.** If the verifier took any transaction whose input 0 is under L, the prover could add inputs, outputs or header deps that make L accept without the owner's key. Owner-lock style locks accept when another input carries a given lock hash. Proxy-lock style locks accept when a given cell is present. The anyone-can-pay lock accepts without a signature when an output under the same lock receives more. The template allows one input, one output and no header deps, so none of these paths opens. Measured with the template: the anyone-can-pay lock with no signature is refused (exit -44). The attacks with a prover-built transaction are reasoning, not measured here.
 
-The input cell follows the same principle: in variant A it is a constant of the verifier, in variant B it is read live from the chain.
+**Rule 3: the input is a constant of the verifier, at u64::MAX.** Never a cell the prover names, and never a smaller capacity: a lock that caps what a key may move must see the whole account leave (section 4).
+
+**Rule 4: no exclusive control, no proof.** A lock that accepts the template with an empty witness opens for anyone (an always-success lock). A lock that accepts the same witness on another message's template does not bind its witness to the message (a lock opened by a password or a hash preimage), so anyone who has seen one proof can make another. Neither shows control by one holder, and binding such a lock would let anyone claim the deposits under it. Measured with locks assembled for the tests (`tests/probes.test.ts`): an always-success lock and a 4 byte password lock are accepted with the probes off and refused with them on. Every real lock in section 13 passes them. The probes stop locks that are open by construction; a lock written to tell a probe from a real proof could still pass them.
+
+**Rule 5: read the VM's result, not text the lock printed.** A lock can print through the debug syscall, and ckb-debugger writes that text to stdout as `Script log: ...` with its line feeds kept, so it can print lines that look like the debugger's own. The v0 runner took the first `Run result:` anywhere in stdout and stderr together, and accepted a lock that printed `Run result: 0` and then exited 1 (measured). The runner now reads stdout and stderr apart, takes only the last two lines of stdout (`Run result: <code>`, `All cycles: <n>`), and counts exit 0 only when the debugger process also exits 0 (ckb-debugger 1.1.1 exits 254 for any other result, measured). An embedded VM avoids the question: it returns the exit code itself.
+
+## 7. Limits
+
+A proof is untrusted input that makes the verifier read the chain and run code. Each limit below bounds that work. With all of them, one proof costs at most one genesis read, 48 cell reads and 3 lock runs.
+
+| Limit | Value | Why |
+| --- | --- | --- |
+| cell deps listed | 16 | JoyID, the largest measured, uses 5. |
+| an out point listed twice | refused | The node refuses it (`DuplicateCellDeps`). Without it, the first review made one proof list a dep group of 1,000 members 15 times: 15,018 cell reads. |
+| cells listed by dep groups | 32 in total, counted from the groups' data before any member is read; each member read once | The secp256k1 dep group, the largest measured, lists 2. The node itself allows 2,048 expanded deps (measured by the review: 2,048 accepted, 2,049 refused with `OverMaxDepExpansionLimit`), but only after reading every member. |
+| transaction size | 597,000 bytes as serialized in a block (the transaction's bytes plus a 4 byte offset) | The consensus block limit. Measured on testnet: at 597,000 the node goes past that check, at 597,001 it refuses with `ExceededMaximumBlockBytes`. The node's pool refuses above 512,000 (measured), a node setting. |
+| witness | 65,536 bytes; a verifier may raise it for a lock with larger signatures | The largest measured is 540 (smart account). It leaves room for post-quantum signatures: SLH-DSA 256f is 49,856 bytes by its parameter set (not measured here). |
+| message | 1,024 bytes | Section 3. |
+| each chain read | a timeout, 10 seconds by default | A slow or stalled node would hold the verifier. |
+| each lock run | a cycle limit, 70,000,000 here | The largest proof measured took 6,905,201 cycles (JoyID, real app). |
+| request body | platforms cap it; 256 KiB is enough | A proof at every limit above is under 140 KB as JSON. |
 
 ## 8. Replay and expiry
 
 | Replay | Stopped by |
 | --- | --- |
-| the same proof sent again to the same verifier | nonce used once |
+| the same proof sent again to the same platform | nonce used once |
 | a proof made for another platform | domain |
-| a proof for another account on the same platform | account |
-| a testnet proof on mainnet, or the reverse | chain line, checked against the node's genesis |
-| a proof for another lock | lock hash line; in A the out point P commits to the lock hash; in B the input must be under the lock |
-| an old proof | issued at window |
-| the variant B transaction sent to the chain | the since cannot be reached |
+| a proof for another account on the same platform | account, and the stored message |
+| a proof for another lock | the stored message (its lock hash line), and P, which commits to the lock hash |
+| a testnet proof on mainnet, or the reverse | chain line, checked against the platform's config and the node's genesis |
+| an old proof, or an old nonce with a new "Issued at" | issued at window; the stored message pins "Issued at" |
+| the proof transaction sent to the chain | its input does not exist |
 
-The verifier only has to keep used nonces for as long as its window. 10 minutes is a reasonable window for an interactive flow.
+The platform only has to keep used nonces for as long as its window. 10 minutes is a reasonable window for an interactive flow.
 
-A proof shows control at verification time. A key can be shared later, and for locks whose code can be upgraded (`hash_type` type) or whose settings live in cells (the smart account's Config Cell), the set of keys that control the lock can change after the proof. A platform that weighs votes long after linking can ask for a fresh proof per vote.
+A proof shows control at verification time. A key can be shared later, and for locks whose code can be upgraded (`hash_type` type) or whose settings live in cells (the smart account's Config Cell), the set of keys that control the lock can change after the proof. Section 9, rule 8 ties a binding to the cells its proof used.
 
-## 9. VM and consensus
+## 9. Platform rules
+
+A verifier only says that a lock accepted one transaction. The rules below are what make that safe to count. A platform that counts weight from bindings MUST follow them.
+
+1. **Issue and store.** The platform writes the message itself: its own domain, the chain from its config, the account, the lock, the time, and a fresh nonce of at least 64 random bits. It MUST store the exact text per nonce, pass it as E's message, and compare byte for byte. It MUST NOT rebuild the message from the proof.
+2. **Tie the nonce.** A nonce is issued for one account and one lock hash, and is good only for both.
+3. **Use once, burn early.** The platform MUST mark the nonce used with a compare-and-set (for example `UPDATE ... SET used_at = ? WHERE nonce = ? AND used_at IS NULL`, accepted only when it changed one row), at the latest before the first chain read (step 8; `verify()` calls `claimNonce` there). A nonce that reached the chain reads is burned whatever the result; another attempt needs a new message. Measured by the second review: the same proof sent three times in parallel bound once.
+4. **Pass every field of E.** The reference `verify()` refuses without them.
+5. **Pin the chain.** The genesis hash comes from the platform's config, never from the message or the node. The verifier checks both against it.
+6. **One active binding per lock.** A platform MUST keep at most one active binding per lock hash (a unique index does it). Binding a lock that is already bound to another account moves it: the previous account is notified, the moved binding carries no weight until a cooldown has passed (for example 72 hours), and the history of bindings is kept. Without this, one key vouches for many accounts (measured by the first review: two accounts bound the same lock and `verify()` accepted both).
+7. **Votes.** While a vote is open, bind, unbind and rebind are refused. Each lock counts at most once per vote, whichever account holds it when ballots are counted.
+8. **Weight.**
+   - Read at one snapshot block, the same for every account in a vote.
+   - Count Nervos DAO deposits only: cells whose type is the Nervos DAO script and whose data is 8 zero bytes. A withdrawing cell keeps the DAO type but its data is a block number; counting it let one 200 CKB deposit count twice when it moved between snapshot and tally (measured by the second review).
+   - Search by the exact lock script (indexer `script_search_mode: "exact"`) and check each cell's lock hash again. The indexer's default prefix search also returns locks whose args start with the same bytes (measured by the second review: a 19 byte args prefix returned the test key's 1,000 CKB deposit).
+   - A binding counts only when it was made before the snapshot block, and only when every cell dep out point its proof used (returned by `verify()`) was still live at the snapshot block. A key rotation, a recovery or a lock upgrade spends one of those cells; the owner then proves again.
+9. **Publish bindings.** Platforms SHOULD list active bindings publicly (lock hash, account, since when) and let a lock's owner revoke a binding by proving control.
+10. **Cap the request.** Cap the size of the request that carries a proof (section 7).
+
+## 10. What wallets show
+
+A proof is a transaction. A wallet that shows it as one shows an input that does not exist, a u64::MAX amount, and an output holding the message, and the domain line then protects a user only if they read the output data.
+
+Wallets SHOULD detect the proof shape: exactly one input, at index 0xffffffff, whose tx hash equals ckbhash(TAG || the wallet's lock hash || the message in the only output), and exactly one output. `readProof(tx, lock)` in the reference code does this. A wallet that detects it SHOULD show a sign-in request, not a transfer: the domain next to the origin of the site asking (and a warning when they differ), the account, and the chain. It SHOULD NOT show the u64::MAX capacity as an amount being sent: nothing leaves the account.
+
+## 11. VM and consensus
 
 What was used here: ckb-debugger 1.1.1 (script version 2, cycle limit set to 70,000,000; its default is 3,500,000,000), run inside WSL on Windows, with cell deps read from `https://testnet.ckb.dev/rpc` on 2026-11-04. The mock transaction format is ckb-debugger's.
 
-ckb-debugger is a development tool. Its script version and cycle limit are defaults, not tied to any chain. A production verifier should embed `ckb-script` (the crate the node uses to verify scripts) with the target chain's consensus and the hardfork switch at the current epoch, so the VM version, syscalls and `hash_type` resolution (`data`, `data1`, `data2`, `type`) match what the node would do for a real spend. Keep it in step with node upgrades.
+ckb-debugger is a development tool. It picks the VM version from `hash_type` for `data`, `data1` and `data2` (measured: a program with a B extension instruction is refused under `data` and runs under `data1` and `data2`); for `type` it uses its `--script-version` option, not the chain's current epoch. A production verifier should embed `ckb-script` (the crate the node uses to verify scripts) with the target chain's consensus and the hardfork switch at the current epoch, so the VM version, syscalls and `hash_type` resolution match what the node would do for a real spend. Keep it in step with node upgrades.
 
-Node RPCs cannot do this check. For variant A, `test_tx_pool_accept` and `estimate_cycles` both refuse with `Unknown(OutPoint(...))` before any script runs. For variant B, `test_tx_pool_accept` answers `Immature` both for the valid proof and for one with a broken signature (measured), so its answer says nothing about the lock.
+Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both refuse the proof with `Unknown(OutPoint(...))` before any script runs.
 
-The verifier runs code chosen by the claimed lock, so it should cap cycles. The largest proof measured took 6,905,201 cycles (JoyID, real app).
-
-## 10. Not covered
+## 12. Not covered
 
 - **JoyID sub-keys.** Untested. Sub-key proofs depend on a CoTA cell dep.
-- **Locks whose signature does not cover the transaction hash.** A witness made for another purpose might satisfy the template, and the proof would not be bound to the message.
-- **Locks that read header deps or since.** The template has no header deps and a fixed since (0 in A, unreachable in B), so the result can differ from a real spend. Locks that read the input's capacity see 0 in variant A.
+- **Omnilock administrator mode.** In an Omnilock whose args carry an administrator root (`omni_root`), the witness may name an administrator identity, proven against regulation-compliance rules, and the lock then checks that identity's signature instead of the owner's. Reading the source suggests an administrator could therefore prove the lock. Untested.
+- **Locks with a time condition.** The template has since 0. Measured: an Omnilock in time-lock mode refuses it (exit -24), so such a lock cannot be proven with this template.
+- **Locks whose signature does not cover the transaction hash.** Probe (b) refuses a witness that opens another message; a lock that signs something else could still pass it.
+- **Locks that read header deps.** The template has none, so the result can differ from a real spend.
+- **Locks that read the input's capacity.** They see u64::MAX. A lock that adds it to another amount could overflow and refuse an honest proof.
 - **Locks that need more than one input or more than one witness**, such as an owner lock that needs the owner's cell as a second input.
 - **Type scripts.** Never run. The proof is about the lock only.
-- **What the user sees.** Wallets show the proof as a transaction. In variant A the message is visible only as output data, in variant B not at all. The domain line protects a user from phishing only where the wallet shows the message.
 - **Mainnet.** Not tested.
+- **A production VM.** Everything here ran in ckb-debugger. A production verifier embeds `ckb-script` with the chain's consensus (section 11); not built here.
 
-## 11. Locks tested
+## 13. Locks tested
 
-All on testnet, 2026-11-04. "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; the others were run once in the prototype and are not in this repository.
+All on testnet, 2026-11-04, under the v1 rules (input at u64::MAX, both probes on). "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
 
-| Lock | Signer | Variant | Result | Cycles | Controls, refused | Vector |
-| --- | --- | --- | --- | --- | --- | --- |
-| secp256k1_blake160 | CCC private key signer | A | accepted | 1,645,417 | wrong key, exit -31 | V1 |
-| JoyID, main key | JoyID app (testnet.joyid.dev) | A | accepted | 6,905,201 | flipped signature bit, exit 11 | V2 |
-| JoyID, main key | JoyID app | B | accepted | 6,810,330 | flipped signature bit, exit 11 | V3 |
-| Cellula smart account, starter | software P-256 key, wallet's WebAuthn shape | A | accepted | 6,772,215 | wrong key, exit 26 | V4 |
-| Cellula smart account, guarded | software P-256 key | A | accepted | 6,755,723 | wrong key 26; no Config Cell 21; forged Config Cell refused by rule 1 | V5 |
-| multisig 2-of-3 | software keys | A | accepted | 3,104,152 | one signature only, exit -11 | no |
-| anyone-can-pay | software key | A | accepted | 1,629,337 | no signature -44; zeroed signature -11 | no |
-| Omnilock, Dogecoin mode | software key | A | accepted | 1,444,984 | another key, exit -31 | no |
-| Nostr lock | software key | A | accepted | 4,169,397 | another key, exit 26 | no |
-| JoyID, main key | software P-256 key in JoyID's format | A | accepted | 6,758,225 | another key, exit 6 | no |
+| Lock | Signer | Result | Cycles | Controls, refused | In repo |
+| --- | --- | --- | --- | --- | --- |
+| secp256k1_blake160 | CCC private key signer | accepted | 1,645,417 | wrong key, exit -31 | V1 |
+| JoyID, main key | JoyID app (testnet.joyid.dev) | accepted | 6,905,201 | flipped signature bit, exit 11 | V2 |
+| Cellula smart account, starter | software P-256 key, wallet's WebAuthn shape | accepted | 6,772,215 | wrong key, exit 26 | V3 |
+| Cellula smart account, guarded | software P-256 key | accepted | 6,755,721 | wrong key 26; no Config Cell 21; forged Config Cell refused by rule 1 | V4 |
+| Cellula smart account, guarded, with per-transaction caps | software P-256 keys, Config Cell fabricated in a local node stub | key with no cap accepted; keys capped at 100 and 1,000 CKB refused, exit 27 | about 6.8 million | key not in the Config Cell, exit 26 | test |
+| multisig 2-of-3 | CCC multisig signer, 2 members | accepted | 3,143,506 | one signature only, exit -11 | no |
+| anyone-can-pay | software key | accepted | 1,602,958 | no signature -44; zeroed signature -11 | no |
+| Omnilock, Dogecoin mode | CCC Doge signer | accepted | 1,445,766 | another key, exit -31 | no |
+| Nostr lock | CCC Nostr signer | accepted | 4,170,082 | another key, exit 26 | no |
+| JoyID, main key | software P-256 key in JoyID's format | accepted | 6,729,097 | another key, exit 6 | no |
+| always-success, assembled | none | refused by probe (a) | | accepted with the probes off | test |
+| 4 byte password, assembled | the password | refused by probe (b) | | accepted with the probes off; empty witness exit 2 | test |
+
+## 14. Rejected alternatives
+
+### Variant B: a real input that cannot be spent yet
+
+The v0 draft had a second template for wallets that look inputs up on chain: a live cell of the lock as the only input, with `since` = absolute block 2^56 - 1, and one output back to the lock, minus a 0.001 CKB fee, holding ckbhash(message). v1 removes it:
+
+- **It satisfies time locks that have not matured.** The lock sees a since far in the future, which meets any "not before block X" condition. Measured with Omnilock in time-lock mode (unlock at block 10^12): variant B with the owner's key exits 0, while a real spend today exits -24.
+- **It lets a capped key prove the account.** Its outflow is only the fee. Measured with the smart-account lock: a key capped at 10 CKB proved a 5,000 CKB cell (exit 0); the same key spending 4,999 CKB of that cell exits 27.
+- **The input is a real cell and may carry a type script.** A lock that accepts when an input carries a given type (input-type proxy style) could be opened through the cell's type instead of the owner's key. Reasoning, not measured.
+- **The wallet shows only a hash.** The message is on the transaction as ckbhash(message), so the domain line protects nobody.
+- **It is not needed.** The JoyID app, the wallet it was meant for, signs the proof transaction (vector V2).
 
 ## Appendix: test vectors
 
-Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points, and every vector is valid only while they stay live; V3 also needs its input cell to stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04. Exit codes are the lock's own. "Template check" means step 8 of section 6.
+Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points, and every vector is valid only while they stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04. Exit codes are the lock's own. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4); the signed bytes are the v0 ones.
 
-### V1. secp256k1, variant A
+### V1. secp256k1
 
-File: `tests/vectors/secp256k1-a.json`. Default CKB lock (secp256k1_blake160_sighash_all). Random key made for the test, signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-04.
+File: `tests/vectors/secp256k1.json`. Default CKB lock (secp256k1_blake160_sighash_all). Random key made for the test, signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-04.
 
 Lock:
 
@@ -264,11 +308,12 @@ Expected:
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31
 - bit 0 of witness byte 30 (inside the signature) flipped: lock exit -31
 - `controls.wrongKey` (another key signed): lock exit -31
+- probe (a), the same transaction with an empty witness: lock exit -2; probe (b) is the other-message line above
 - `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
 
-### V2. JoyID, variant A, real app
+### V2. JoyID, real app
 
-File: `tests/vectors/joyid-a.json`. JoyID app on testnet (testnet.joyid.dev), main key, through @ckb-ccc/joy-id 1.2.6 CkbSigner.signOnlyTransaction. 2026-11-04.
+File: `tests/vectors/joyid.json`. JoyID app on testnet (testnet.joyid.dev), main key, through @ckb-ccc/joy-id 1.2.6 CkbSigner.signOnlyTransaction. 2026-11-04.
 
 Lock:
 
@@ -373,120 +418,12 @@ Expected:
 - the proof: accepted, 6,905,201 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 12
 - bit 0 of witness byte 95 (inside the signature) flipped: lock exit 11
+- probe (a), the same transaction with an empty witness: lock exit 4; probe (b) is the other-message line above
 - `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
 
-### V3. JoyID, variant B, real app
+### V3. Cellula smart account (starter)
 
-File: `tests/vectors/joyid-b.json`. JoyID app on testnet, main key, same session as joyid-a. The input is a 300 CKB testnet cell sent to the JoyID address for this test. The vector holds while that cell stays live. 2026-11-04.
-
-Lock:
-
-```json
-{
-  "codeHash": "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac",
-  "hashType": "type",
-  "args": "0x000140911fa94eaef8c1d0eca81b23e1972ecb0548dc"
-}
-```
-
-Lock hash: `0xd9d177037d0888e09330bf0dd18e98c534ea3479b4376911d0a5279ead21e0f8`
-
-Message (288 bytes):
-
-```text
-cellula.id wants you to prove control of a CKB lock.
-Account: joyid-test-B
-Lock hash: 0xd9d177037d0888e09330bf0dd18e98c534ea3479b4376911d0a5279ead21e0f8
-Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-04T16:44:50.089Z
-Nonce: 0x29ebf433c800cf84
-```
-
-Input cell (live when signed and when tested): `0x1c3b3ff75a9864dc3f3ce4b96bec5eafc1975eb1b4f2750451af8d705c1a1f60:0`, capacity 300 CKB, no type, no data.
-
-Transaction hash: `0x3f8b543eb64406e8efb8484524c42586f0324ec1298d5c6b08f2eddc1dc98180`
-
-Signed transaction (CCC JSON, camelCase):
-
-```json
-{
-  "version": "0x0",
-  "cellDeps": [
-    {
-      "outPoint": {
-        "txHash": "0x4a596d31dc35e88fb1591debbf680b04a44b4a434e3a94453c21ea8950ffb4d9",
-        "index": "0x0"
-      },
-      "depType": "code"
-    },
-    {
-      "outPoint": {
-        "txHash": "0x4a596d31dc35e88fb1591debbf680b04a44b4a434e3a94453c21ea8950ffb4d9",
-        "index": "0x1"
-      },
-      "depType": "code"
-    },
-    {
-      "outPoint": {
-        "txHash": "0xf2c9dbfe7438a8c622558da8fa912d36755271ea469d3a25cb8d3373d35c8638",
-        "index": "0x1"
-      },
-      "depType": "code"
-    },
-    {
-      "outPoint": {
-        "txHash": "0x95ecf9b41701b45d431657a67bbfa3f07ef7ceb53bf87097f3674e1a4a19ce62",
-        "index": "0x1"
-      },
-      "depType": "code"
-    },
-    {
-      "outPoint": {
-        "txHash": "0x8b3255491f3c4dcc1cfca33d5c6bcaec5409efe4bbda243900f9580c47e0242e",
-        "index": "0x1"
-      },
-      "depType": "code"
-    }
-  ],
-  "headerDeps": [],
-  "inputs": [
-    {
-      "previousOutput": {
-        "txHash": "0x1c3b3ff75a9864dc3f3ce4b96bec5eafc1975eb1b4f2750451af8d705c1a1f60",
-        "index": "0x0"
-      },
-      "since": "0xffffffffffffff"
-    }
-  ],
-  "outputs": [
-    {
-      "capacity": "0x6fc222560",
-      "lock": {
-        "codeHash": "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac",
-        "hashType": "type",
-        "args": "0x000140911fa94eaef8c1d0eca81b23e1972ecb0548dc"
-      }
-    }
-  ],
-  "outputsData": [
-    "0xb65f59c002f909bcd483677cdc0a0d423113da2bbffe52ed90ad1fc3efd97cb1"
-  ],
-  "witnesses": [
-    "0x6f010000100000006f0100006f0100005b01000001768ba2ab3ab54eb7f1a4c3f76ba1d6f1cf1532301ce310b77326e46b2e673086adaca74912a2cfa32ca0de2c3e4a77b4e386d11b36675d3f4b6734bc9490ffbf6953afee6d8ddb6a1b50f520d5eb4394927a40cc13f9de21ac079ebc83f7bcd70bd4b72478477b36f051517c1a165ebff5b91f8a2fe42b0e282ebf7f23e154e72b8b05e1f0303efb898fe4d6de601198c7a7b864abbe6a21c73b2e787e187c521d000000007b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224f4449354d47493259574a6b4d574d355a6a42694d6d51774e5755784d6a55304e6a686b59546734595467354e6d45354f54646c4d5755324d7a4d324e57566a4d444d7759574d314d32466b5a4449335a44526b4e77222c226f726967696e223a2268747470733a2f2f746573746e65742e6a6f7969642e646576222c2263726f73734f726967696e223a66616c73657d"
-  ]
-}
-```
-
-Expected:
-
-- the proof: accepted, 6,810,330 cycles
-- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 12
-- bit 0 of witness byte 95 (inside the signature) flipped: lock exit 11
-- `test_tx_pool_accept` on the signed transaction: refused, `Immature(Inputs[0])`, and the same answer with the flipped signature
-
-### V4. Cellula smart account (starter), variant A
-
-File: `tests/vectors/smart-account-starter-a.json`. Cellula smart-account lock v6 on testnet, starter form (args 0x01 0xfe blake160(key)). Software P-256 key signing in the wallet's WebAuthn shape. 2026-11-04.
+File: `tests/vectors/smart-account-starter.json`. Cellula smart-account lock v6 on testnet, starter form (args 0x01 0xfe blake160(key)). Software P-256 key signing in the wallet's WebAuthn shape. 2026-11-04.
 
 Lock:
 
@@ -578,11 +515,12 @@ Expected:
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 26
 - bit 0 of witness byte 265 (inside the signature) flipped: lock exit 26
 - `controls.wrongKey` (another key signed): lock exit 26
+- probe (a), the same transaction with an empty witness: lock exit 4; probe (b) is the other-message line above
 - `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
 
-### V5. Cellula smart account (guarded), variant A
+### V4. Cellula smart account (guarded)
 
-File: `tests/vectors/smart-account-guarded-a.json`. Cellula smart-account lock v6 on testnet, guarded form (32 byte args, authenticators in a live Config Cell given as a cell dep). Software P-256 key as authenticator 0. 2026-11-04.
+File: `tests/vectors/smart-account-guarded.json`. Cellula smart-account lock v6 on testnet, guarded form (32 byte args, authenticators in a live Config Cell given as a cell dep). Software P-256 key as authenticator 0. 2026-11-04.
 
 Lock:
 
@@ -677,10 +615,11 @@ Signed transaction (CCC JSON, camelCase):
 
 Expected:
 
-- the proof: accepted, 6,755,723 cycles
+- the proof: accepted, 6,755,721 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 26
 - bit 0 of witness byte 265 (inside the signature) flipped: lock exit 26
 - `controls.wrongKey` (another key signed): lock exit 26
 - `controls.missingConfig` (right key, Config Cell dep left out): lock exit 21
 - `controls.forgedConfig` (other key, forged Config Cell at an out point that does not exist): refused, cell dep not live; with the prover's copy of that dep the lock exits 0, which is why rule 1 exists
+- probe (a), the same transaction with an empty witness: lock exit 4; probe (b) is the other-message line above
 - `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
