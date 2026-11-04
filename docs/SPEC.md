@@ -1,6 +1,6 @@
 # Ward: lock proof for CKB, v1
 
-Status: draft. Prototype, tested on testnet only, not audited.
+Status: draft. Prototype, tested on testnet only.
 
 v1 replaces the v0 draft after two reviews. Variant B is gone (section 14). The verifier resolves the proof input with capacity u64::MAX, runs two "no exclusive control" probes, and bounds its own work. Platforms get normative rules (section 9). The bytes a wallet signs for the remaining template did not change, so every v0 variant A proof is a v1 proof, and the domain tag stays `CKB lock proof v0\n` (section 4).
 

@@ -91,7 +91,7 @@ The vectors depend on testnet cell deps staying live.
 
 ## Status
 
-Prototype. Tested on testnet only. Not audited. The spec is a v1 draft and may change. Not published to npm.
+Prototype. Tested on testnet only. The spec is a v1 draft and may change. Not published to npm.
 
 Known gaps are listed in section 12 of the spec: JoyID sub-keys, Omnilock administrator mode, mainnet and a production VM are untested, and locks with a time condition, or whose signature does not cover the transaction hash, are not covered.
 
