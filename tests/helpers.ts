@@ -47,7 +47,8 @@ const command = process.env.CKB_DEBUGGER;
 const distro = process.env.CKB_DEBUGGER_WSL;
 export const runLock: RunLock | undefined =
   command || distro ? ckbDebugger({ command, wsl: distro ? { distro, user: process.env.CKB_DEBUGGER_WSL_USER } : undefined }) : undefined;
-export const NO_VM = NO_NETWORK || (runLock ? false : "set CKB_DEBUGGER or CKB_DEBUGGER_WSL to run locks");
+export const NO_DEBUGGER = runLock ? false : "set CKB_DEBUGGER or CKB_DEBUGGER_WSL to run locks";
+export const NO_VM = NO_NETWORK || NO_DEBUGGER;
 
 /** The same message with one more character in the nonce. */
 export const otherMessage = (message: string) => message.replace(/\nNonce: (.*)$/, "\nNonce: $1x");

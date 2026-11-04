@@ -14,4 +14,4 @@ export {
   type VerifyOptions,
   type VerifyResult,
 } from "./verify.ts";
-export { DEFAULT_MAX_CYCLES, ckbDebugger, toWslPath, type CkbDebuggerOptions, type LockRun, type MockCell, type MockTransaction, type RunLock } from "./runner.ts";
+export { DEFAULT_MAX_CYCLES, ckbDebugger, parseDebuggerRun, toWslPath, type CkbDebuggerOptions, type LockRun, type MockCell, type MockTransaction, type RunLock } from "./runner.ts";

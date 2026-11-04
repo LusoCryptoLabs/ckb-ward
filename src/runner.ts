@@ -21,7 +21,7 @@ export interface MockTransaction {
   tx: unknown;
 }
 
-/** Result of running input 0's lock. code 0 means the lock accepted. code null means it did not run. */
+/** Result of running input 0's lock. code 0 means the lock accepted. code null means it did not run to an exit. */
 export interface LockRun {
   code: number | null;
   cycles?: bigint;
@@ -44,21 +44,59 @@ export interface CkbDebuggerOptions {
 }
 
 export const DEFAULT_MAX_CYCLES = 70_000_000;
+/** Most stdout kept from one run. A lock can print through the debug syscall; only the tail matters. */
+const MAX_KEPT_OUTPUT = 1 << 20;
 
 /** C:\a\b -> /mnt/c/a/b */
 export function toWslPath(path: string): string {
   return path.replace(/^([A-Za-z]):[\\/]/, (_, d: string) => `/mnt/${d.toLowerCase()}/`).replace(/\\/g, "/");
 }
 
-function run(cmd: string, args: string[], timeoutMs: number): Promise<{ status: number | null; out: string }> {
+interface Exited {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+function run(cmd: string, args: string[], timeoutMs: number): Promise<Exited> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { windowsHide: true, timeout: timeoutMs });
-    let out = "";
-    child.stdout.on("data", (b: Buffer) => (out += b.toString("utf8")));
-    child.stderr.on("data", (b: Buffer) => (out += b.toString("utf8")));
+    let stdout = "";
+    let stderr = "";
+    const keep = (s: string) => (s.length > MAX_KEPT_OUTPUT ? s.slice(-MAX_KEPT_OUTPUT) : s);
+    child.stdout.on("data", (b: Buffer) => (stdout = keep(stdout + b.toString("utf8"))));
+    child.stderr.on("data", (b: Buffer) => (stderr = keep(stderr + b.toString("utf8"))));
     child.on("error", reject);
-    child.on("close", (status) => resolve({ status, out }));
+    child.on("close", (status) => resolve({ status, stdout, stderr }));
   });
+}
+
+const RESULT = /^Run result: (-?\d+)$/;
+const CYCLES = /^All cycles: ([\d,]+)(?:\([^)]*\))?$/;
+
+/**
+ * Reads the outcome of one ckb-debugger run (tested with 1.1.1).
+ *
+ * The debugger ends stdout with its own two lines, "Run result: <exit code>" and
+ * "All cycles: <n>", and exits 0 only when the script exited 0 (254 otherwise). A lock can print
+ * through the debug syscall, and its text reaches stdout as "Script log: ..." with any line feeds
+ * kept, so it can print lines that look like the debugger's. Only the last two lines of stdout
+ * count, and an exit 0 counts only when the debugger process also exited 0.
+ */
+export function parseDebuggerRun(r: Exited): LockRun {
+  const lines = r.stdout.split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  const result = lines.at(-2)?.match(RESULT);
+  const cycles = lines.at(-1)?.match(CYCLES);
+  const output = [r.stdout.trim(), r.stderr.trim()].filter(Boolean).join("\n");
+  const parsed = result && cycles ? Number(result[1]) : null;
+  const cyclesValue = cycles ? BigInt(cycles[1].replace(/,/g, "")) : undefined;
+  // Exit 0 needs both the debugger's last lines and its process status. A non-zero lock exit is
+  // reported as such only when the debugger also failed, so the two never disagree.
+  let code: number | null = null;
+  if (parsed === 0 && r.status === 0) code = 0;
+  else if (parsed !== null && parsed !== 0 && r.status !== 0 && r.status !== null) code = parsed;
+  return { code, cycles: code === null ? undefined : cyclesValue, output };
 }
 
 /**
@@ -78,13 +116,7 @@ export function ckbDebugger(options: CkbDebuggerOptions = {}): RunLock {
       const r = options.wsl
         ? await run("wsl", ["-d", options.wsl.distro, "-u", options.wsl.user ?? "root", "--exec", command, ...args], timeoutMs)
         : await run(command, args, timeoutMs);
-      const code = r.out.match(/Run result: (-?\d+)/);
-      const cycles = r.out.match(/All cycles: ([\d,]+)/);
-      return {
-        code: code ? Number(code[1]) : null,
-        cycles: cycles ? BigInt(cycles[1].replace(/,/g, "")) : undefined,
-        output: r.out.trim(),
-      };
+      return parseDebuggerRun(r);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
