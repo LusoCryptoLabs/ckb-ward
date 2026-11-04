@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
-import { ckbDebugger, type RunLock } from "../src/index.ts";
+import { ckbDebugger, parseMessage, type Expect, type RunLock } from "../src/index.ts";
 
 export interface Control {
   about: string;
@@ -69,4 +69,13 @@ export async function poolAccept(txLike: ccc.TransactionLike): Promise<string> {
   });
   const body = await res.json();
   return body.error ? String(body.error.message) : `ACCEPTED ${JSON.stringify(body.result)}`;
+}
+
+/**
+ * What a platform that issued `message` passes as `expect`: the message as stored, its own domain
+ * and chain, the account and nonce, a 10 minute window, and a clock one minute after issue.
+ */
+export function expectFor(message: string, overrides: Partial<Expect> = {}): Expect {
+  const f = parseMessage(message);
+  return { message, domain: f.domain, account: f.account, nonce: f.nonce, chain: f.chain, maxAgeSeconds: 600, now: new Date(Date.parse(f.issuedAt) + 60_000), ...overrides };
 }

@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
 import { jsonRpc, message, mockTransaction, proofInput, proofTemplate, resolveCellDeps, verify } from "../src/index.ts";
-import { NO_VM, RPC_URL, runLock, vectors } from "./helpers.ts";
+import { NO_VM, RPC_URL, expectFor, runLock, vectors } from "./helpers.ts";
 import { TESTNET_GENESIS, startStub } from "./stub.ts";
 
 const V5 = vectors.find((x) => x.file === "smart-account-guarded.json")!;
@@ -90,7 +90,7 @@ test("smart account: a capped key cannot prove the account, an unlimited key can
       const tx = proofTemplate(account, text);
       tx.cellDeps = cellDeps.map((d) => d.clone());
       await signProof(tx, account, k, index);
-      const r = await verify({ lock: account, message: text, tx }, { rpcUrl: stub.url, runLock: runLock!, expect: { domain: "dao.example", account: "acct", nonce, maxAgeSeconds: 600 } });
+      const r = await verify({ lock: account, message: text, tx }, { rpcUrl: stub.url, runLock: runLock!, expect: expectFor(text, { now: new Date() }) });
       results[name] = { reason: r.ok ? `ACCEPTED, cycles ${r.cycles}` : r.reason, tx, text };
       t.diagnostic(`${name}: ${results[name].reason}`);
     }

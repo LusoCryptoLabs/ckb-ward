@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
 import { mockTransaction, proofInput, proofTemplate, resolveCellDeps, verify, type MockTransaction, type VerifyResult } from "../src/index.ts";
-import { NO_NETWORK, NO_VM, RPC_URL, flipWitnessByte, otherMessage, poolAccept, runLock, vectors, type Vector } from "./helpers.ts";
+import { NO_NETWORK, NO_VM, RPC_URL, expectFor, flipWitnessByte, otherMessage, poolAccept, runLock, vectors, type Vector } from "./helpers.ts";
 
-const opts = () => ({ rpcUrl: RPC_URL, runLock: runLock! });
+const opts = (message: string) => ({ rpcUrl: RPC_URL, runLock: runLock!, expect: expectFor(message) });
 const show = (r: VerifyResult) => (r.ok ? `ACCEPTED, cycles ${r.cycles}` : `REFUSED, ${r.reason}${r.run?.cycles ? `, cycles ${r.run.cycles}` : ""}`);
 
 /** Runs the lock on a transaction directly, skipping the verifier's template check. */
@@ -18,13 +18,13 @@ for (const v of vectors) {
   const proof = { lock: v.lock, message: v.message, tx: v.tx };
 
   test(`${v.name}: accepted`, { skip: NO_VM }, async (t) => {
-    const r = await verify(proof, opts());
+    const r = await verify(proof, opts(v.message));
     t.diagnostic(show(r));
     assert.equal(r.ok, true);
   });
 
   test(`${v.name}: control, another message`, { skip: NO_VM }, async (t) => {
-    const r = await verify({ ...proof, message: otherMessage(v.message) }, opts());
+    const r = await verify({ ...proof, message: otherMessage(v.message) }, opts(otherMessage(v.message)));
     t.diagnostic(`verifier: ${show(r)}`);
     assert.equal(r.ok, false);
     assert.match(!r.ok ? r.reason : "", /not the proof template/);
@@ -40,7 +40,7 @@ for (const v of vectors) {
   });
 
   test(`${v.name}: control, one signature bit flipped`, { skip: NO_VM }, async (t) => {
-    const r = await verify({ ...proof, tx: flipWitnessByte(v.tx, v.signatureByte) }, opts());
+    const r = await verify({ ...proof, tx: flipWitnessByte(v.tx, v.signatureByte) }, opts(v.message));
     t.diagnostic(show(r));
     assert.equal(r.ok, false);
     assert.equal(!r.ok && r.reason, `lock exited ${v.signatureFlipExit}`);
@@ -48,7 +48,7 @@ for (const v of vectors) {
 
   for (const [name, c] of Object.entries(v.controls ?? {})) {
     test(`${v.name}: control, ${name}`, { skip: NO_VM }, async (t) => {
-      const r = await verify({ ...proof, tx: c.tx }, opts());
+      const r = await verify({ ...proof, tx: c.tx }, opts(v.message));
       t.diagnostic(show(r));
       assert.equal(r.ok, false);
       if (!c.forgedDep) return assert.equal(!r.ok && r.reason, `lock exited ${c.exit}`);
@@ -71,10 +71,14 @@ for (const v of vectors) {
   });
 }
 
-test("a message for another chain is refused", { skip: NO_NETWORK }, async () => {
+test("a platform pinned to mainnet, given a testnet node, refuses before reading cells", { skip: NO_NETWORK }, async () => {
   const v = vectors.find((x) => x.file === "secp256k1.json")!;
   const mainnet = "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5";
   const message = v.message.replace(/\nChain: 0x[0-9a-f]{64}/, `\nChain: ${mainnet}`);
-  const r = await verify({ lock: v.lock, message, tx: v.tx }, opts());
-  assert.deepEqual(r, { ok: false, reason: "message names another chain", run: undefined });
+  // The template of the mainnet message, so every free check passes; the signature does not matter.
+  const tx = proofTemplate(v.lock, message);
+  tx.cellDeps = ccc.Transaction.from(v.tx).cellDeps;
+  tx.witnesses = ["0x"];
+  const r = await verify({ lock: v.lock, message, tx }, { ...opts(message), runLock: async () => assert.fail("no lock run") });
+  assert.deepEqual(r, { ok: false, reason: "the node is on another chain", run: undefined });
 });
