@@ -1,8 +1,8 @@
 {
-  "name": "ckb-lock-proof",
+  "name": "ckb-ward",
   "version": "0.1.0",
   "private": true,
-  "description": "Prove control of any CKB lock by running the lock on a transaction that can never land",
+  "description": "Ward, lock proof for CKB: prove control of any CKB lock by running the lock on a transaction that can never land",
   "license": "MIT",
   "author": "LusoCryptoLabs",
   "type": "module",

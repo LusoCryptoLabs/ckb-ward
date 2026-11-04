@@ -32,9 +32,9 @@ export const vectors: Vector[] = readdirSync(DIR)
   .filter((f) => f.endsWith(".json"))
   .map((f) => ({ file: f, ...JSON.parse(readFileSync(new URL(f, DIR), "utf8")) }));
 
-/** Testnet RPC. CKB_LOCK_PROOF_OFFLINE=1 skips every test that needs it. */
+/** Testnet RPC. CKB_WARD_OFFLINE=1 skips every test that needs it. */
 export const RPC_URL = process.env.CKB_RPC_URL ?? "https://testnet.ckb.dev/rpc";
-export const NO_NETWORK = process.env.CKB_LOCK_PROOF_OFFLINE === "1" ? "CKB_LOCK_PROOF_OFFLINE=1" : false;
+export const NO_NETWORK = process.env.CKB_WARD_OFFLINE === "1" ? "CKB_WARD_OFFLINE=1" : false;
 
 /**
  * The lock runner. Tests that run a lock are skipped unless CKB_DEBUGGER (the executable) or

@@ -1,4 +1,4 @@
-# CKB lock proof, v1
+# Ward: lock proof for CKB, v1
 
 Status: draft. Prototype, tested on testnet only, not audited.
 

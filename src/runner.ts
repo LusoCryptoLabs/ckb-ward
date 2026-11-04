@@ -108,7 +108,7 @@ export function ckbDebugger(options: CkbDebuggerOptions = {}): RunLock {
   const maxCycles = options.maxCycles ?? DEFAULT_MAX_CYCLES;
   const timeoutMs = options.timeoutMs ?? 60_000;
   return async (mock) => {
-    const dir = await mkdtemp(join(options.tmpDir ?? tmpdir(), "ckb-lock-proof-"));
+    const dir = await mkdtemp(join(options.tmpDir ?? tmpdir(), "ckb-ward-"));
     try {
       const file = join(dir, "mock.json");
       await writeFile(file, JSON.stringify(mock));

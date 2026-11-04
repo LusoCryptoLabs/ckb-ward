@@ -19,4 +19,4 @@ jobs:
       # Offline only: the vector replays need the testnet RPC and ckb-debugger.
       - run: npm test
         env:
-          CKB_LOCK_PROOF_OFFLINE: "1"
+          CKB_WARD_OFFLINE: "1"
