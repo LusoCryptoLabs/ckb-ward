@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
-import { PROOF_INDEX, PROOF_INPUT_CAPACITY, proofOutPoint, proofTemplate } from "../src/index.ts";
+import { PROOF_INDEX, PROOF_INPUT_CAPACITY, parseMessage, proofOutPoint, proofTemplate, readProof } from "../src/index.ts";
 import { otherMessage, vectors } from "./helpers.ts";
 
 function rebuild(v: (typeof vectors)[number], message: string): ccc.Transaction {
@@ -43,4 +43,28 @@ test("the input carries the cell the verifier resolves: capacity u64::MAX, the l
   assert.equal(input.outputData, "0x");
   // The signed hash does not cover the resolved input, so the signed vectors keep their hashes.
   assert.equal(ccc.numToHex(PROOF_INPUT_CAPACITY), "0xffffffffffffffff");
+});
+
+test("readProof: a wallet tells a proof request from a transfer", () => {
+  for (const v of vectors) {
+    const f = readProof(v.tx, v.lock);
+    assert.equal(f?.domain, parseMessage(v.message).domain, v.file);
+    assert.equal(f?.account, parseMessage(v.message).account, v.file);
+  }
+  const v = vectors.find((x) => x.file === "secp256k1.json")!;
+  const other = vectors.find((x) => x.file === "joyid.json")!;
+  // Another lock than the wallet's: the out point was derived from another lock hash.
+  assert.equal(readProof(v.tx, other.lock), undefined);
+  // An ordinary transfer of a real cell, same output and data.
+  const transfer = ccc.Transaction.from(v.tx);
+  transfer.inputs[0].previousOutput = ccc.OutPoint.from({ txHash: `0x${"11".repeat(32)}`, index: 0 });
+  assert.equal(readProof(transfer, v.lock), undefined);
+  // Index 0xffffffff but a tx hash not derived from the tag: not a proof either.
+  const fake = ccc.Transaction.from(v.tx);
+  fake.inputs[0].previousOutput = ccc.OutPoint.from({ txHash: `0x${"11".repeat(32)}`, index: PROOF_INDEX });
+  assert.equal(readProof(fake, v.lock), undefined);
+  // The message changed in the output: the out point no longer matches it.
+  const edited = ccc.Transaction.from(v.tx);
+  edited.outputsData[0] = ccc.hexFrom(ccc.bytesFrom(otherMessage(v.message), "utf8"));
+  assert.equal(readProof(edited, v.lock), undefined);
 });

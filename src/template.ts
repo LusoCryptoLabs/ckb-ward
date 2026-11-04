@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { parseMessage, type MessageFields } from "./message.ts";
 
 /**
  * Domain separation for the proof out point. 18 bytes, ends with a line feed. It names the bytes of
@@ -45,4 +46,26 @@ export function proofTemplate(lock: ccc.ScriptLike, message: string): ccc.Transa
     outputsData: [ccc.hexFrom(data)],
     witnesses: [],
   });
+}
+
+/**
+ * For wallets. When `tx` is exactly the proof template for `lock` and the message in its output
+ * (one input at index 0xffffffff whose tx hash is derived from the tag, the lock hash and that
+ * message), returns the message's fields. A wallet then shows a proof request, not a transfer:
+ * the domain, compared with the origin of the site that asks, and the account. Anything else gives
+ * undefined.
+ */
+export function readProof(tx: ccc.TransactionLike, lock: ccc.ScriptLike): MessageFields | undefined {
+  const t = ccc.Transaction.from(tx);
+  if (t.inputs.length !== 1 || t.outputs.length !== 1 || t.outputsData.length !== 1) return undefined;
+  if (t.inputs[0].previousOutput.index !== BigInt(PROOF_INDEX)) return undefined;
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(ccc.bytesFrom(t.outputsData[0]));
+    const tpl = proofTemplate(lock, text);
+    tpl.cellDeps = t.cellDeps.map((d) => d.clone());
+    if (tpl.hash() !== t.hash()) return undefined;
+    return parseMessage(text);
+  } catch {
+    return undefined;
+  }
 }
