@@ -57,7 +57,19 @@ export interface VerifyOptions {
   maxWitnessBytes?: number;
 }
 
-export type VerifyResult = { ok: true; fields: MessageFields; cycles?: bigint } | { ok: false; reason: string; run?: LockRun };
+export type VerifyResult =
+  | {
+      ok: true;
+      fields: MessageFields;
+      cycles?: bigint;
+      /**
+       * Every cell the proof's deps resolved to, dep group members included, read live. The lock's
+       * code and settings live there: a binding stays valid only while all of them are still live
+       * (a key rotation, a recovery or a lock upgrade spends one, and the owner proves again).
+       */
+      cellDeps: ccc.OutPoint[];
+    }
+  | { ok: false; reason: string; run?: LockRun };
 
 /** Largest number of cell deps a proof may list (JoyID, the largest measured here, uses 5). */
 export const MAX_CELL_DEPS = 16;
@@ -287,7 +299,8 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
   if (run.code === 0) {
     const probe = options.probes === false ? undefined : await noExclusiveControl(lock, proof.message, tx, deps, options.runLock);
     if (probe) return fail(probe.reason, probe.run);
-    return { ok: true, fields, cycles: run.cycles };
+    const cellDeps = deps.map((d) => ccc.OutPoint.from({ txHash: d.cell_dep.out_point.tx_hash, index: d.cell_dep.out_point.index }));
+    return { ok: true, fields, cycles: run.cycles, cellDeps };
   }
   if (run.code === null) return fail(`lock did not run: ${run.output.split("\n").at(-1)}`, run);
   return fail(`lock exited ${run.code}`, run);

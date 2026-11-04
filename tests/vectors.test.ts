@@ -21,6 +21,10 @@ for (const v of vectors) {
     const r = await verify(proof, opts(v.message));
     t.diagnostic(show(r));
     assert.equal(r.ok, true);
+    // The deps it used, for the binding to record: every listed dep, plus dep group members.
+    const used = r.ok ? r.cellDeps.map((o) => `${o.txHash}:${o.index}`) : [];
+    for (const d of ccc.Transaction.from(v.tx).cellDeps) assert.ok(used.includes(`${d.outPoint.txHash}:${d.outPoint.index}`));
+    t.diagnostic(`cell deps used: ${used.length}`);
   });
 
   test(`${v.name}: control, another message`, { skip: NO_VM }, async (t) => {
