@@ -1,0 +1,95 @@
+{
+ "name": "JoyID, variant B, real app",
+ "about": "JoyID app on testnet, main key, same session as joyid-a. The input is a 300 CKB testnet cell sent to the JoyID address for this test. The vector holds while that cell stays live. 2026-11-04.",
+ "variant": "B",
+ "lock": {
+  "codeHash": "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac",
+  "hashType": "type",
+  "args": "0x000140911fa94eaef8c1d0eca81b23e1972ecb0548dc"
+ },
+ "message": "cellula.id wants you to prove control of a CKB lock.\nAccount: joyid-test-B\nLock hash: 0xd9d177037d0888e09330bf0dd18e98c534ea3479b4376911d0a5279ead21e0f8\nChain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606\nIssued at: 2026-11-04T16:44:50.089Z\nNonce: 0x29ebf433c800cf84",
+ "tx": {
+  "version": "0x0",
+  "cellDeps": [
+   {
+    "outPoint": {
+     "txHash": "0x4a596d31dc35e88fb1591debbf680b04a44b4a434e3a94453c21ea8950ffb4d9",
+     "index": "0x0"
+    },
+    "depType": "code"
+   },
+   {
+    "outPoint": {
+     "txHash": "0x4a596d31dc35e88fb1591debbf680b04a44b4a434e3a94453c21ea8950ffb4d9",
+     "index": "0x1"
+    },
+    "depType": "code"
+   },
+   {
+    "outPoint": {
+     "txHash": "0xf2c9dbfe7438a8c622558da8fa912d36755271ea469d3a25cb8d3373d35c8638",
+     "index": "0x1"
+    },
+    "depType": "code"
+   },
+   {
+    "outPoint": {
+     "txHash": "0x95ecf9b41701b45d431657a67bbfa3f07ef7ceb53bf87097f3674e1a4a19ce62",
+     "index": "0x1"
+    },
+    "depType": "code"
+   },
+   {
+    "outPoint": {
+     "txHash": "0x8b3255491f3c4dcc1cfca33d5c6bcaec5409efe4bbda243900f9580c47e0242e",
+     "index": "0x1"
+    },
+    "depType": "code"
+   }
+  ],
+  "headerDeps": [],
+  "inputs": [
+   {
+    "previousOutput": {
+     "txHash": "0x1c3b3ff75a9864dc3f3ce4b96bec5eafc1975eb1b4f2750451af8d705c1a1f60",
+     "index": "0x0"
+    },
+    "since": "0xffffffffffffff"
+   }
+  ],
+  "outputs": [
+   {
+    "capacity": "0x6fc222560",
+    "lock": {
+     "codeHash": "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac",
+     "hashType": "type",
+     "args": "0x000140911fa94eaef8c1d0eca81b23e1972ecb0548dc"
+    }
+   }
+  ],
+  "outputsData": [
+   "0xb65f59c002f909bcd483677cdc0a0d423113da2bbffe52ed90ad1fc3efd97cb1"
+  ],
+  "witnesses": [
+   "0x6f010000100000006f0100006f0100005b01000001768ba2ab3ab54eb7f1a4c3f76ba1d6f1cf1532301ce310b77326e46b2e673086adaca74912a2cfa32ca0de2c3e4a77b4e386d11b36675d3f4b6734bc9490ffbf6953afee6d8ddb6a1b50f520d5eb4394927a40cc13f9de21ac079ebc83f7bcd70bd4b72478477b36f051517c1a165ebff5b91f8a2fe42b0e282ebf7f23e154e72b8b05e1f0303efb898fe4d6de601198c7a7b864abbe6a21c73b2e787e187c521d000000007b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224f4449354d47493259574a6b4d574d355a6a42694d6d51774e5755784d6a55304e6a686b59546734595467354e6d45354f54646c4d5755324d7a4d324e57566a4d444d7759574d314d32466b5a4449335a44526b4e77222c226f726967696e223a2268747470733a2f2f746573746e65742e6a6f7969642e646576222c2263726f73734f726967696e223a66616c73657d"
+  ]
+ },
+ "inputCell": {
+  "outPoint": {
+   "txHash": "0x1c3b3ff75a9864dc3f3ce4b96bec5eafc1975eb1b4f2750451af8d705c1a1f60",
+   "index": "0x0"
+  },
+  "cellOutput": {
+   "capacity": "0x6fc23ac00",
+   "lock": {
+    "codeHash": "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac",
+    "hashType": "type",
+    "args": "0x000140911fa94eaef8c1d0eca81b23e1972ecb0548dc"
+   }
+  },
+  "outputData": "0x"
+ },
+ "signatureByte": 95,
+ "otherMessageExit": 12,
+ "signatureFlipExit": 11
+}
