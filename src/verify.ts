@@ -44,6 +44,13 @@ export interface VerifyOptions {
    * reads and lock runs, whether the proof is then accepted or not.
    */
   claimNonce?: (fields: MessageFields) => boolean | Promise<boolean>;
+  /**
+   * After the lock accepts, run it twice more: with an empty witness, and with the same witness on
+   * the template of another message. If either opens, nobody holds the lock alone (an
+   * always-success lock, or a witness that does not commit to the message, like a password), and
+   * the proof is refused. Default true. Turn off only to measure what the probes stop.
+   */
+  probes?: boolean;
 }
 
 export type VerifyResult = { ok: true; fields: MessageFields; cycles?: bigint } | { ok: false; reason: string; run?: LockRun };
@@ -152,6 +159,26 @@ function checkExpect(f: MessageFields, e: Expect, chain: ccc.Hex, message: strin
 
 const text = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** The same message with the nonce replaced by a fresh random one: a message nobody was asked to sign. */
+function probeMessage(message: string): string {
+  const nonce = `probe-${ccc.hexFrom(globalThis.crypto.getRandomValues(new Uint8Array(16))).slice(2)}`;
+  return message.replace(/\nNonce: [^\n]*$/, `\nNonce: ${nonce}`);
+}
+
+/** The two probes of VerifyOptions.probes. Returns the reason to refuse, or undefined. */
+async function noExclusiveControl(lock: ccc.Script, message: string, tx: ccc.Transaction, deps: MockTransaction["mock_info"]["cell_deps"], runLock: RunLock) {
+  const empty = tx.clone();
+  empty.witnesses = ["0x"];
+  const a = await runLock(mockTransaction(empty, proofInput(lock), deps));
+  if (a.code === 0) return { reason: "no exclusive control: the lock opens with an empty witness", run: a };
+  const other = proofTemplate(lock, probeMessage(message));
+  other.cellDeps = tx.cellDeps.map((d) => d.clone());
+  other.witnesses = [...tx.witnesses];
+  const b = await runLock(mockTransaction(other, proofInput(lock), deps));
+  if (b.code === 0) return { reason: "no exclusive control: the same witness opens another message", run: b };
+  return undefined;
+}
+
 /**
  * Checks a proof. ok: true means the claimed lock accepted the proof transaction that the verifier
  * itself built from (lock, message), with every cell dep read live from the chain, and the message
@@ -195,7 +222,11 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
     throw e;
   }
   const run = await options.runLock(mockTransaction(tx, proofInput(lock), deps));
-  if (run.code === 0) return { ok: true, fields, cycles: run.cycles };
+  if (run.code === 0) {
+    const probe = options.probes === false ? undefined : await noExclusiveControl(lock, proof.message, tx, deps, options.runLock);
+    if (probe) return fail(probe.reason, probe.run);
+    return { ok: true, fields, cycles: run.cycles };
+  }
   if (run.code === null) return fail(`lock did not run: ${run.output.split("\n").at(-1)}`, run);
   return fail(`lock exited ${run.code}`, run);
 }

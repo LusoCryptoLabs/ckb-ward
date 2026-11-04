@@ -39,6 +39,14 @@ for (const v of vectors) {
     assert.equal(raw.code, v.otherMessageExit);
   });
 
+  test(`${v.name}: the empty witness probe is refused by the lock`, { skip: NO_VM }, async (t) => {
+    const tx = ccc.Transaction.from(v.tx);
+    tx.witnesses = ["0x"];
+    const raw = await runRaw(v, tx);
+    t.diagnostic(`lock run directly with an empty witness: exit ${raw.code}`);
+    assert.notEqual(raw.code, 0);
+  });
+
   test(`${v.name}: control, one signature bit flipped`, { skip: NO_VM }, async (t) => {
     const r = await verify({ ...proof, tx: flipWitnessByte(v.tx, v.signatureByte) }, opts(v.message));
     t.diagnostic(show(r));
