@@ -190,7 +190,8 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 - **Locks that read the input's capacity.** They see u64::MAX. A lock that adds it to another amount could overflow and refuse an honest proof.
 - **Locks that need more than one input or more than one witness**, such as an owner lock that needs the owner's cell as a second input.
 - **Type scripts.** Never run. The proof is about the lock only.
-- **Mainnet.** Not tested.
+- **Mainnet.** Checked once on 2026-11-04, not as vectors: a proof from a fresh secp256k1 key, and one from a JoyID account signed in the JoyID app, were both accepted against mainnet; replay, another account, one flipped signature byte and a testnet platform were refused, and the mainnet node refused the proof transaction (unknown out point). The JoyID app on mainnet only accepts a requesting page served over https.
+- **JoyID sub-keys.** One attempt signed with the main key instead; a sub-key proof adds the CoTA cell as a dep, which the verifier reads like any other, but this is untested.
 - **A production VM.** Everything here ran in ckb-debugger. A production verifier embeds `ckb-script` with the chain's consensus (section 11); not built here.
 
 ## 13. Locks tested
