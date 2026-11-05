@@ -14,6 +14,8 @@ export interface Control {
 export interface Vector {
   file: string;
   name: string;
+  /** The chain the proof was signed for and its cell deps live on. Default testnet. */
+  network?: "testnet" | "mainnet";
   about: string;
   lock: ccc.ScriptLike;
   message: string;
@@ -35,6 +37,9 @@ export const vectors: Vector[] = readdirSync(DIR)
 /** Testnet RPC. CKB_WARD_OFFLINE=1 skips every test that needs it. */
 export const RPC_URL = process.env.CKB_RPC_URL ?? "https://testnet.ckb.dev/rpc";
 export const NO_NETWORK = process.env.CKB_WARD_OFFLINE === "1" ? "CKB_WARD_OFFLINE=1" : false;
+/** Mainnet RPC, for the mainnet vectors only (read only: their deps are read, nothing is sent). */
+export const MAINNET_RPC_URL = process.env.CKB_MAINNET_RPC_URL ?? "https://mainnet.ckb.dev/rpc";
+export const rpcFor = (v: { network?: string }) => (v.network === "mainnet" ? MAINNET_RPC_URL : RPC_URL);
 
 /**
  * The lock runner. Tests that run a lock are skipped unless CKB_DEBUGGER (the executable) or
@@ -64,8 +69,22 @@ export const wardVmRunLock: RunLock | undefined =
       })
     : undefined;
 
+/** ward-vm under mainnet's consensus, for the mainnet vectors; offline at a mainnet epoch of 2026-11-05. */
+export const wardVmMainnetRunLock: RunLock | undefined =
+  vmCommand || vmDistro
+    ? wardVm({
+        command: vmCommand,
+        wsl: vmDistro ? { distro: vmDistro, user: process.env.WARD_VM_WSL_USER } : undefined,
+        chain: "mainnet",
+        epoch: process.env.CKB_WARD_OFFLINE === "1" ? 15242n : () => tipEpoch(MAINNET_RPC_URL),
+      })
+    : undefined;
+
 /** The runner the tests use: ckb-debugger when it is set, else ward-vm. */
 export const runLock: RunLock | undefined = debuggerRunLock ?? wardVmRunLock;
+/** The same, for a vector: ward-vm runs under the vector's chain. */
+export const runLockFor = (v: { network?: string }): RunLock | undefined => debuggerRunLock ?? (v.network === "mainnet" ? wardVmMainnetRunLock : wardVmRunLock);
+export const wardVmFor = (v: { network?: string }): RunLock | undefined => (v.network === "mainnet" ? wardVmMainnetRunLock : wardVmRunLock);
 export const NO_DEBUGGER = runLock ? false : "set CKB_DEBUGGER, CKB_DEBUGGER_WSL, WARD_VM or WARD_VM_WSL to run locks";
 export const NO_VM = NO_NETWORK || NO_DEBUGGER;
 export const NO_BOTH = debuggerRunLock && wardVmRunLock ? false : "set both a ckb-debugger and a ward-vm runner to compare them";
@@ -83,8 +102,8 @@ export function flipWitnessByte(txLike: ccc.TransactionLike, offset: number): cc
 }
 
 /** test_tx_pool_accept: the node's full check, nothing added to the pool. Returns the error text. */
-export async function poolAccept(txLike: ccc.TransactionLike): Promise<string> {
-  const res = await fetch(RPC_URL, {
+export async function poolAccept(txLike: ccc.TransactionLike, rpcUrl = RPC_URL): Promise<string> {
+  const res = await fetch(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id: 1, jsonrpc: "2.0", method: "test_tx_pool_accept", params: [JsonRpcTransformers.transactionFrom(ccc.Transaction.from(txLike)), "passthrough"] }),

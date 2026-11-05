@@ -4,21 +4,21 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
 import { PROOF_INPUT_CAPACITY, mockTransaction, proofInput, proofTemplate, resolveCellDeps, verify, type MockTransaction, type VerifyResult } from "../src/index.ts";
-import { NO_NETWORK, NO_VM, RPC_URL, expectFor, flipWitnessByte, otherMessage, poolAccept, runLock, vectors, type Vector } from "./helpers.ts";
+import { NO_NETWORK, NO_VM, expectFor, flipWitnessByte, otherMessage, poolAccept, rpcFor, runLockFor, vectors, type Vector } from "./helpers.ts";
 
-const opts = (message: string) => ({ rpcUrl: RPC_URL, runLock: runLock!, expect: expectFor(message) });
+const opts = (v: Vector, message: string) => ({ rpcUrl: rpcFor(v), runLock: runLockFor(v)!, expect: expectFor(message) });
 const show = (r: VerifyResult) => (r.ok ? `ACCEPTED, cycles ${r.cycles}` : `REFUSED, ${r.reason}${r.run?.cycles ? `, cycles ${r.run.cycles}` : ""}`);
 
 /** Runs the lock on a transaction directly, skipping the verifier's template check. */
 async function runRaw(v: Vector, tx: ccc.Transaction, deps?: MockTransaction["mock_info"]["cell_deps"]) {
-  return runLock!(mockTransaction(tx, proofInput(v.lock), deps ?? (await resolveCellDeps(RPC_URL, tx.cellDeps))));
+  return runLockFor(v)!(mockTransaction(tx, proofInput(v.lock), deps ?? (await resolveCellDeps(rpcFor(v), tx.cellDeps))));
 }
 
 for (const v of vectors) {
   const proof = { lock: v.lock, message: v.message, tx: v.tx };
 
   test(`${v.name}: accepted`, { skip: NO_VM }, async (t) => {
-    const r = await verify(proof, opts(v.message));
+    const r = await verify(proof, opts(v, v.message));
     t.diagnostic(show(r));
     assert.equal(r.ok, true);
     // The deps it used, for the binding to record: every listed dep, plus dep group members.
@@ -28,7 +28,7 @@ for (const v of vectors) {
   });
 
   test(`${v.name}: control, another message`, { skip: NO_VM }, async (t) => {
-    const r = await verify({ ...proof, message: otherMessage(v.message) }, opts(otherMessage(v.message)));
+    const r = await verify({ ...proof, message: otherMessage(v.message) }, opts(v, otherMessage(v.message)));
     t.diagnostic(`verifier: ${show(r)}`);
     assert.equal(r.ok, false);
     assert.match(!r.ok ? r.reason : "", /not the proof template/);
@@ -52,7 +52,7 @@ for (const v of vectors) {
   });
 
   test(`${v.name}: control, one signature bit flipped`, { skip: NO_VM }, async (t) => {
-    const r = await verify({ ...proof, tx: flipWitnessByte(v.tx, v.signatureByte) }, opts(v.message));
+    const r = await verify({ ...proof, tx: flipWitnessByte(v.tx, v.signatureByte) }, opts(v, v.message));
     t.diagnostic(show(r));
     assert.equal(r.ok, false);
     assert.equal(!r.ok && r.reason, `lock exited ${v.signatureFlipExit}`);
@@ -60,7 +60,7 @@ for (const v of vectors) {
 
   for (const [name, c] of Object.entries(v.controls ?? {})) {
     test(`${v.name}: control, ${name}`, { skip: NO_VM }, async (t) => {
-      const r = await verify({ ...proof, tx: c.tx }, opts(v.message));
+      const r = await verify({ ...proof, tx: c.tx }, opts(v, v.message));
       t.diagnostic(show(r));
       assert.equal(r.ok, false);
       if (!c.forgedDep) return assert.equal(!r.ok && r.reason, `lock exited ${c.exit}`);
@@ -69,7 +69,7 @@ for (const v of vectors) {
       // is the verifier reading deps from the chain, not the signature failing.
       const tx = ccc.Transaction.from(c.tx);
       const forgedHash = c.forgedDep.cell_dep.out_point.tx_hash;
-      const real = await resolveCellDeps(RPC_URL, tx.cellDeps.filter((d) => d.outPoint.txHash !== forgedHash));
+      const real = await resolveCellDeps(rpcFor(v), tx.cellDeps.filter((d) => d.outPoint.txHash !== forgedHash));
       const raw = await runRaw(v, tx, [...real, c.forgedDep]);
       t.diagnostic(`same proof, prover's copy of the dep, lock run directly: exit ${raw.code}, cycles ${raw.cycles}`);
       assert.equal(raw.code, 0);
@@ -77,7 +77,7 @@ for (const v of vectors) {
   }
 
   test(`${v.name}: the node refuses the signed proof`, { skip: NO_NETWORK }, async (t) => {
-    const e = await poolAccept(v.tx);
+    const e = await poolAccept(v.tx, rpcFor(v));
     t.diagnostic(e);
     assert.match(e, /Unknown\(OutPoint\(0x[0-9a-f]{64}ffffffff\)\)/);
   });
@@ -98,7 +98,7 @@ test("anyone-can-pay: the path without a signature is real, and only the templat
   const raw = await runRaw(v, tx);
   t.diagnostic(`no signature, an output under the same lock, lock run directly: exit ${raw.code}, cycles ${raw.cycles}`);
   assert.equal(raw.code, 0);
-  const r = await verify({ lock: v.lock, message: v.message, tx }, { ...opts(v.message), runLock: async () => assert.fail("no lock run") });
+  const r = await verify({ lock: v.lock, message: v.message, tx }, { ...opts(v, v.message), runLock: async () => assert.fail("no lock run") });
   assert.match(!r.ok ? r.reason : "", /not the proof template/);
 });
 
@@ -114,6 +114,16 @@ test("multisig: each control keeps the accepted first signature, so the second s
   assert.notEqual(slot(c.wrongKey.tx, 1), slot(v.tx, 1));
 });
 
+test("secp256k1 (mainnet): a testnet platform refuses it before any chain read", async () => {
+  const v = vectors.find((x) => x.file === "mainnet-secp256k1.json")!;
+  const testnet = "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606";
+  const r = await verify(
+    { lock: v.lock, message: v.message, tx: v.tx },
+    { rpcUrl: "http://127.0.0.1:1", runLock: async () => assert.fail("no lock run"), expect: expectFor(v.message, { chain: testnet }) },
+  );
+  assert.deepEqual(r, { ok: false, reason: "message names another chain", run: undefined });
+});
+
 test("a platform pinned to mainnet, given a testnet node, refuses before reading cells", { skip: NO_NETWORK }, async () => {
   const v = vectors.find((x) => x.file === "secp256k1.json")!;
   const mainnet = "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5";
@@ -122,6 +132,6 @@ test("a platform pinned to mainnet, given a testnet node, refuses before reading
   const tx = proofTemplate(v.lock, message);
   tx.cellDeps = ccc.Transaction.from(v.tx).cellDeps;
   tx.witnesses = ["0x"];
-  const r = await verify({ lock: v.lock, message, tx }, { ...opts(message), runLock: async () => assert.fail("no lock run") });
+  const r = await verify({ lock: v.lock, message, tx }, { ...opts(v, message), runLock: async () => assert.fail("no lock run") });
   assert.deepEqual(r, { ok: false, reason: "the node is on another chain", run: undefined });
 });
