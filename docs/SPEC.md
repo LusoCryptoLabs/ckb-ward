@@ -205,6 +205,7 @@ All on testnet, under the v1 rules (input at u64::MAX, both probes on): V5 to V8
 | Cellula smart account, starter | software P-256 key, wallet's WebAuthn shape | accepted | 6,772,215 | wrong key, exit 26 | V3 |
 | Cellula smart account, guarded | software P-256 key | accepted | 6,755,721 | wrong key 26; no Config Cell 21; forged Config Cell refused by rule 1 | V4 |
 | Cellula smart account, guarded, with per-transaction caps | software P-256 keys, Config Cell fabricated in a local node stub | key with no cap accepted; keys capped at 100 and 1,000 CKB refused, exit 27 | about 6.8 million | key not in the Config Cell, exit 26 | test |
+| Cellula smart account, starter and guarded | the Cellula wallet's own screen (testnet build, 2026-11-05): virtual passkeys, and one real phone passkey through the Cellula app | accepted | 6,750,745 to 6,900,939 | same nonce again; another account; another domain; signature byte 265 flipped, exit 26 | no |
 | multisig 2-of-3 | CCC multisig signer, 2 members | accepted | 3,143,655 | one signature only -11; one key twice -52; a member and a non-member -52; flipped signature bit -52 | V5 |
 | anyone-can-pay | CCC private key signer | accepted | 1,610,026 | no signature -44; another key -31; flipped signature bit -31 | V6 |
 | Omnilock, Dogecoin mode | CCC Doge signer | accepted | 1,462,047 | another key -31; flipped signature bit -31 | V7 |

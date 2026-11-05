@@ -23,6 +23,17 @@ Running the lock itself needs neither. Any wallet that can sign an ordinary tran
 
 Nodes refuse the proof as `Unknown(OutPoint)`. So a node cannot verify a proof either; the verifier needs a VM.
 
+## Install
+
+```sh
+npm install ckb-ward
+```
+
+Two entries:
+
+- `ckb-ward`: everything, the verifier included. Node only: the runner spawns ckb-debugger.
+- `ckb-ward/wallet`: `message`, `parseMessage`, `proofTemplate`, `readProof` and the constants. No Node built-ins, so it bundles for a browser. This is what a wallet or a site needs.
+
 ## Use
 
 ```ts
@@ -56,7 +67,12 @@ const result = await verify(
 
 Verifying is the easy half. A platform that counts weight from bindings also needs the rules of section 9 of the spec: one active binding per lock, bindings frozen while a vote is open, weight read at one snapshot block from Nervos DAO deposits only.
 
-Wallets can call `readProof(tx, lock)` to recognise a proof request and show its domain next to the site's origin, instead of a transfer.
+Wallets can call `readProof(tx, lock)` (from `ckb-ward/wallet`) to recognise a proof request and show its domain next to the site's origin, instead of a transfer.
+
+### Wallets that sign it
+
+- **Cellula wallet** (testnet, since 2026-11-05). A site asks through the wallet link (`cellula-sdk` `CellulaWalletSigner`, `signTransaction(proofTemplate(lock, message))`). The wallet shows the request as a proof: who asks, the account, the address, and that nothing leaves. It refuses a proof for another site, another network or an address that is not its own, and any request from a site on another device. Tested through its screen with a starter and a guarded account, and with a real phone passkey (section 13 of the spec).
+- **JoyID** signs the template in its app (vector V2), but shows it as a transaction.
 
 ### Lock runner
 
