@@ -184,7 +184,7 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 
 ## 12. Not covered
 
-- **JoyID sub-keys.** Untested. Sub-key proofs depend on a CoTA cell dep.
+- **JoyID sub-keys.** Untested. A sub-key proof adds the CoTA cell as a dep, which the verifier reads like any other. One attempt signed with the main key instead.
 - **Locks with a time condition.** The template has since 0. Measured: an Omnilock in time-lock mode refuses it (exit -24), so such a lock cannot be proven with this template.
 - **Locks whose signature does not cover the transaction hash.** Probe (b) refuses a witness that opens another message; a lock that signs something else could still pass it.
 - **Locks that read header deps.** The template has none, so the result can differ from a real spend.
@@ -192,7 +192,6 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 - **Locks that need more than one input or more than one witness**, such as an owner lock that needs the owner's cell as a second input.
 - **Type scripts.** Never run. The proof is about the lock only.
 - **Mainnet.** Checked once on 2026-11-04, not as vectors: a proof from a fresh secp256k1 key, and one from a JoyID account signed in the JoyID app, were both accepted against mainnet; replay, another account, one flipped signature byte and a testnet platform were refused, and the mainnet node refused the proof transaction (unknown out point). The JoyID app on mainnet only accepts a requesting page served over https.
-- **JoyID sub-keys.** One attempt signed with the main key instead; a sub-key proof adds the CoTA cell as a dep, which the verifier reads like any other, but this is untested.
 - **A production VM.** Everything here ran in ckb-debugger. A production verifier embeds `ckb-script` with the chain's consensus (section 11); not built here.
 
 ## 13. Locks tested
