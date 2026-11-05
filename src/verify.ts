@@ -105,7 +105,7 @@ export const OMNILOCK_CODE_HASHES: readonly ccc.Hex[] = [
   "0x79f90bb5e892d80dd213439eeab551120eb417678824f282b4ffb5f21bad2e1e", // testnet type hash, 2022 deployment
   "0x9b819793a64463aed77c615d6cb226eea5487ccfc0783043a587254cda2b6f26", // mainnet type hash (RFC 0042)
   "0x6b29b6f10346b43c540e53806ba88ba0fe3a0c3a29d7448ef555840c8f8318fa", // testnet code since 2024-04-12
-  "0x768f306681da232ceb0b94f436c5f813377179762a831c5ad8797bd4fd2d118d", // testnet code 2024-01 to 2024-04; listed for mainnet too, not read here
+  "0x768f306681da232ceb0b94f436c5f813377179762a831c5ad8797bd4fd2d118d", // mainnet code (cell 0xc76edf46...:0, read 2026-11-05); testnet code 2024-01 to 2024-04
   "0x1bf147d1c95a5ad51016bd426c33f364257e685af54df26fc69ec40e3ae267d1", // testnet code, 2022 deployment
 ];
 
