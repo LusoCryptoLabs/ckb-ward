@@ -38,3 +38,4 @@ export {
   type RunLock,
   type WardVmOptions,
 } from "./runner.ts";
+export { depsLiveAt, type DepAtSnapshot, type DepsAtSnapshot, type SnapshotOptions } from "./snapshot.ts";

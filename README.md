@@ -65,7 +65,13 @@ const result = await verify(
 
 `verify` refuses when `expect` is missing, when the message is not the one issued, when the lock is an Omnilock in administrator mode, when the transaction is not exactly the template the verifier builds, when it breaks a limit (cell deps, dep group members, size), when a cell dep is not live on the chain, when the lock exits non-zero, or when the lock also opens without the owner. It throws only when the node cannot be reached or the runner cannot start. `cellDeps` lists the cells the proof ran with; a binding stays valid while they are live.
 
-Verifying is the easy half. A platform that counts weight from bindings also needs the rules of section 9 of the spec: one active binding per lock, bindings frozen while a vote is open, weight read at one snapshot block from Nervos DAO deposits only.
+Verifying is the easy half. A platform that counts weight from bindings also needs the rules of section 9 of the spec: one active binding per lock, bindings frozen while a vote is open, weight read at one snapshot block from Nervos DAO deposits only, and a binding counted only while the cells its proof ran with were live at that block:
+
+```ts
+import { depsLiveAt } from "ckb-ward";
+const at = await depsLiveAt(rpcUrl, binding.cellDeps, snapshotBlock); // cellDeps as verify() returned them
+if (!at.live) skip(binding); // at.deps says which cell, and when it was created or spent
+```
 
 Wallets can call `readProof(tx, lock)` (from `ckb-ward/wallet`) to recognise a proof request and show its domain next to the site's origin, instead of a transfer.
 
