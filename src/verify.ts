@@ -94,6 +94,28 @@ export const RPC_TIMEOUT_MS = 10_000;
 /** Allowed clock difference for "Issued at" in the future. */
 export const CLOCK_SKEW_SECONDS = 60;
 
+/**
+ * Omnilock, by type hash of its deployments and by data hash of their code. An Omnilock whose
+ * flags byte (args byte 21) has bit 0 set is in administrator mode: it also opens for any identity
+ * in an admin list cell the administrator controls, so one admin key proves every lock that names
+ * that list (SPEC section 6, rule 6). A copy under another code hash is not recognised.
+ */
+export const OMNILOCK_CODE_HASHES: readonly ccc.Hex[] = [
+  "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb", // testnet type hash (CCC)
+  "0x79f90bb5e892d80dd213439eeab551120eb417678824f282b4ffb5f21bad2e1e", // testnet type hash, 2022 deployment
+  "0x9b819793a64463aed77c615d6cb226eea5487ccfc0783043a587254cda2b6f26", // mainnet type hash (RFC 0042)
+  "0x6b29b6f10346b43c540e53806ba88ba0fe3a0c3a29d7448ef555840c8f8318fa", // testnet code since 2024-04-12
+  "0x768f306681da232ceb0b94f436c5f813377179762a831c5ad8797bd4fd2d118d", // testnet code 2024-01 to 2024-04; listed for mainnet too, not read here
+  "0x1bf147d1c95a5ad51016bd426c33f364257e685af54df26fc69ec40e3ae267d1", // testnet code, 2022 deployment
+];
+
+/** True for an Omnilock with the administrator flag set (OMNILOCK_CODE_HASHES). */
+export function omnilockAdmin(lock: ccc.ScriptLike): boolean {
+  const script = ccc.Script.from(lock);
+  const args = ccc.bytesFrom(script.args);
+  return OMNILOCK_CODE_HASHES.includes(script.codeHash) && args.length > 21 && (args[21] & 1) === 1;
+}
+
 type Rpc = (method: string, params: unknown[]) => Promise<any>;
 
 /** A JSON RPC client. Each call fails after timeoutMs, body included. */
@@ -270,6 +292,7 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
     return fail(`malformed proof: ${text(e)}`);
   }
   if (fields.lockHash !== lock.hash()) return fail("message names another lock");
+  if (omnilockAdmin(lock)) return fail("omnilock in administrator mode: an administrator can sign for it");
   const expectError = checkExpect(fields, expect, chain, proof.message);
   if (expectError) return fail(expectError);
   if (tx.witnesses.length !== 1) return fail("exactly one witness expected");
