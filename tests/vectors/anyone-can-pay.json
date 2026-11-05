@@ -1,0 +1,137 @@
+{
+ "name": "anyone-can-pay",
+ "about": "anyone-can-pay lock with the owner's key hash as args, no minimums. Random key made for the test, signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction), which signs anyone-can-pay inputs of its key. Testnet, 2026-11-05.",
+ "lock": {
+  "codeHash": "0x3419a1c09eb2567f6552ee7a8ecffd64155cffe0f1796e6e61ec088d740c1356",
+  "hashType": "type",
+  "args": "0x7cedbdb76a9575c711cdfd80c3527e2860c6dc83"
+ },
+ "message": "dao.example wants you to prove control of a CKB lock.\nAccount: user-acp\nLock hash: 0xcdebf3a1bd32f07a56f80d26f3a08a407275cbe9167b7ca673422251ca654bcb\nChain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606\nIssued at: 2026-11-05T12:00:00Z\nNonce: n-acp",
+ "tx": {
+  "version": "0x0",
+  "cellDeps": [
+   {
+    "outPoint": {
+     "txHash": "0xec26b0f85ed839ece5f11c4c4e837ec359f5adc4420410f6453b1f6b60fb96a6",
+     "index": "0x0"
+    },
+    "depType": "depGroup"
+   }
+  ],
+  "headerDeps": [],
+  "inputs": [
+   {
+    "previousOutput": {
+     "txHash": "0x2d20b60eb3b42e5eb419a7af928bf95c9126afed7ae1113528fbdb6e1e46d3d5",
+     "index": "0xffffffff"
+    },
+    "since": "0x0"
+   }
+  ],
+  "outputs": [
+   {
+    "capacity": "0x731c89500",
+    "lock": {
+     "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "hashType": "data",
+     "args": "0x"
+    }
+   }
+  ],
+  "outputsData": [
+   "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d6163700a4c6f636b20686173683a203078636465626633613162643332663037613536663830643236663361303861343037323735636265393136376237636136373334323232353163613635346263620a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30355431323a30303a30305a0a4e6f6e63653a206e2d616370"
+  ],
+  "witnesses": [
+   "0x5500000010000000550000005500000041000000c5a2895b2186468585fc9d4d0df0b8bea518698d8740baf48a11325f5d71d7e846fe7cbda09c691a0c5adfaf87a9ad725c8c6b9ac76515075226252e12658fca01"
+  ]
+ },
+ "signatureByte": 60,
+ "otherMessageExit": -31,
+ "signatureFlipExit": -31,
+ "controls": {
+  "wrongKey": {
+   "about": "A second random key signs the same sighash for the first key's lock.",
+   "exit": -31,
+   "tx": {
+    "version": "0x0",
+    "cellDeps": [
+     {
+      "outPoint": {
+       "txHash": "0xec26b0f85ed839ece5f11c4c4e837ec359f5adc4420410f6453b1f6b60fb96a6",
+       "index": "0x0"
+      },
+      "depType": "depGroup"
+     }
+    ],
+    "headerDeps": [],
+    "inputs": [
+     {
+      "previousOutput": {
+       "txHash": "0x2d20b60eb3b42e5eb419a7af928bf95c9126afed7ae1113528fbdb6e1e46d3d5",
+       "index": "0xffffffff"
+      },
+      "since": "0x0"
+     }
+    ],
+    "outputs": [
+     {
+      "capacity": "0x731c89500",
+      "lock": {
+       "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+       "hashType": "data",
+       "args": "0x"
+      }
+     }
+    ],
+    "outputsData": [
+     "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d6163700a4c6f636b20686173683a203078636465626633613162643332663037613536663830643236663361303861343037323735636265393136376237636136373334323232353163613635346263620a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30355431323a30303a30305a0a4e6f6e63653a206e2d616370"
+    ],
+    "witnesses": [
+     "0x55000000100000005500000055000000410000006375c208845519e6485b06c3ae40340d310e09cc26ad5e35f436cade474ffa724ca4d6cbb2094022645de7151d1fc9294b9cf70883613cb630cf7ea323c4b16100"
+    ]
+   }
+  },
+  "noSignature": {
+   "about": "No signature (empty witness): the lock takes its payment path, which needs an output under the same lock.",
+   "exit": -44,
+   "tx": {
+    "version": "0x0",
+    "cellDeps": [
+     {
+      "outPoint": {
+       "txHash": "0xec26b0f85ed839ece5f11c4c4e837ec359f5adc4420410f6453b1f6b60fb96a6",
+       "index": "0x0"
+      },
+      "depType": "depGroup"
+     }
+    ],
+    "headerDeps": [],
+    "inputs": [
+     {
+      "previousOutput": {
+       "txHash": "0x2d20b60eb3b42e5eb419a7af928bf95c9126afed7ae1113528fbdb6e1e46d3d5",
+       "index": "0xffffffff"
+      },
+      "since": "0x0"
+     }
+    ],
+    "outputs": [
+     {
+      "capacity": "0x731c89500",
+      "lock": {
+       "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+       "hashType": "data",
+       "args": "0x"
+      }
+     }
+    ],
+    "outputsData": [
+     "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d6163700a4c6f636b20686173683a203078636465626633613162643332663037613536663830643236663361303861343037323735636265393136376237636136373334323232353163613635346263620a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30355431323a30303a30305a0a4e6f6e63653a206e2d616370"
+    ],
+    "witnesses": [
+     "0x"
+    ]
+   }
+  }
+ }
+}

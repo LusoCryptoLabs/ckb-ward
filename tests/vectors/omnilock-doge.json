@@ -1,0 +1,109 @@
+{
+ "name": "Omnilock, Dogecoin mode",
+ "about": "Omnilock with a Dogecoin identity (flag 0x05). Random key made for the test, signed with an unmodified CCC SignerDogePrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-05.",
+ "lock": {
+  "codeHash": "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb",
+  "hashType": "type",
+  "args": "0x050ffa745d9c337cf15ef4ee5b5dc8672ea19b3fa900"
+ },
+ "message": "dao.example wants you to prove control of a CKB lock.\nAccount: user-doge\nLock hash: 0x4bc158c10fca14a6cca6e5273ea5db0bb3d06ad0b3b508bb5aa48a910f6ef2c3\nChain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606\nIssued at: 2026-11-05T12:00:00Z\nNonce: n-doge",
+ "tx": {
+  "version": "0x0",
+  "cellDeps": [
+   {
+    "outPoint": {
+     "txHash": "0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37",
+     "index": "0x0"
+    },
+    "depType": "depGroup"
+   },
+   {
+    "outPoint": {
+     "txHash": "0xec18bf0d857c981c3d1f4e17999b9b90c484b303378e94de1a57b0872f5d4602",
+     "index": "0x0"
+    },
+    "depType": "code"
+   }
+  ],
+  "headerDeps": [],
+  "inputs": [
+   {
+    "previousOutput": {
+     "txHash": "0x8411e47ff60f74930665baf4e1661f2ce96fc5433beaca09dbcf425da97190b0",
+     "index": "0xffffffff"
+    },
+    "since": "0x0"
+   }
+  ],
+  "outputs": [
+   {
+    "capacity": "0x73db45700",
+    "lock": {
+     "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "hashType": "data",
+     "args": "0x"
+    }
+   }
+  ],
+  "outputsData": [
+   "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d646f67650a4c6f636b20686173683a203078346263313538633130666361313461366363613665353237336561356462306262336430366164306233623530386262356161343861393130663665663263330a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30355431323a30303a30305a0a4e6f6e63653a206e2d646f6765"
+  ],
+  "witnesses": [
+   "0x690000001000000069000000690000005500000055000000100000005500000055000000410000001f350031ebcf994ffee44f53d2be51494bcb46ee615b0d41435cc85de2bd2cd9702d47b71c57046897487cfe8036da8027e6ce47e7f45bbd8db98df7d851b9f874"
+  ]
+ },
+ "signatureByte": 80,
+ "otherMessageExit": -31,
+ "signatureFlipExit": -31,
+ "controls": {
+  "wrongKey": {
+   "about": "A second random Dogecoin key signs the same template for the first key's lock.",
+   "exit": -31,
+   "tx": {
+    "version": "0x0",
+    "cellDeps": [
+     {
+      "outPoint": {
+       "txHash": "0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37",
+       "index": "0x0"
+      },
+      "depType": "depGroup"
+     },
+     {
+      "outPoint": {
+       "txHash": "0xec18bf0d857c981c3d1f4e17999b9b90c484b303378e94de1a57b0872f5d4602",
+       "index": "0x0"
+      },
+      "depType": "code"
+     }
+    ],
+    "headerDeps": [],
+    "inputs": [
+     {
+      "previousOutput": {
+       "txHash": "0x8411e47ff60f74930665baf4e1661f2ce96fc5433beaca09dbcf425da97190b0",
+       "index": "0xffffffff"
+      },
+      "since": "0x0"
+     }
+    ],
+    "outputs": [
+     {
+      "capacity": "0x73db45700",
+      "lock": {
+       "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+       "hashType": "data",
+       "args": "0x"
+      }
+     }
+    ],
+    "outputsData": [
+     "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d646f67650a4c6f636b20686173683a203078346263313538633130666361313461366363613665353237336561356462306262336430366164306233623530386262356161343861393130663665663263330a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30355431323a30303a30305a0a4e6f6e63653a206e2d646f6765"
+    ],
+    "witnesses": [
+     "0x690000001000000069000000690000005500000055000000100000005500000055000000410000001fdc57bf2228e78470e929b7ae1cbb3d5211a62d3d4ef7e327a65806f840548db910b45cb31540b0c39326913aa83421dcd3751c232c2a3b5f6f23219d764dae53"
+    ]
+   }
+  }
+ }
+}
