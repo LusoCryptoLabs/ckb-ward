@@ -180,6 +180,8 @@ What was used here: ckb-debugger 1.1.1 (script version 2, cycle limit set to 70,
 
 ckb-debugger is a development tool. It picks the VM version from `hash_type` for `data`, `data1` and `data2` (measured: a program with a B extension instruction is refused under `data` and runs under `data1` and `data2`); for `type` it uses its `--script-version` option, not the chain's current epoch. A production verifier should embed `ckb-script` (the crate the node uses to verify scripts) with the target chain's consensus and the hardfork switch at the current epoch, so the VM version, syscalls and `hash_type` resolution match what the node would do for a real spend. Keep it in step with node upgrades.
 
+`ward-vm` (in `vm/`, 2026-11-05) is that verifier's runner. It is built from the node's own crates at the tag mainnet and testnet ran that day (0.210.0, commit 2592ddf; `ckb-vm` 0.24.15, where the `ckb-script` on crates.io pins 0.24.14), loads the chain's bundled spec (which checks the genesis hash), and runs the lock group of input 0 for a transaction submitted at a tip in the epoch given, with only the node's syscalls. Measured against ckb-debugger: the eight vectors of section 13 give the same exit code and the same cycles under both, accepted and with one signature bit flipped. A program that calls syscall 9001, which ckb-debugger adds for development, exits 0 under the debugger and stops under `ward-vm` with `invalid syscall 9001`, as a node would. Move the tag in `vm/Cargo.toml` when the node moves.
+
 Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both refuse the proof with `Unknown(OutPoint(...))` before any script runs.
 
 ## 12. Not covered
@@ -192,7 +194,7 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 - **Locks that need more than one input or more than one witness**, such as an owner lock that needs the owner's cell as a second input.
 - **Type scripts.** Never run. The proof is about the lock only.
 - **Mainnet.** Checked once on 2026-11-04, not as vectors: a proof from a fresh secp256k1 key, and one from a JoyID account signed in the JoyID app, were both accepted against mainnet; replay, another account, one flipped signature byte and a testnet platform were refused, and the mainnet node refused the proof transaction (unknown out point). The JoyID app on mainnet only accepts a requesting page served over https.
-- **A production VM.** Everything here ran in ckb-debugger. A production verifier embeds `ckb-script` with the chain's consensus (section 11); not built here.
+- **A production VM in production.** `ward-vm` (section 11) runs the node's script code under the chain's consensus, and every vector agrees with ckb-debugger under it. Running it for a platform, and moving its pin with node upgrades, is the platform's.
 
 ## 13. Locks tested
 

@@ -16,7 +16,20 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
-      # Offline only: the vector replays need the testnet RPC and ckb-debugger.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vm/target
+          key: ward-vm-${{ hashFiles('vm/Cargo.lock') }}
+      - name: build ward-vm
+        working-directory: vm
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo +stable build --release --locked
+      # Offline: the vector replays need the testnet RPC. The assembled locks run under ward-vm.
       - run: npm test
         env:
           CKB_WARD_OFFLINE: "1"
+          WARD_VM: vm/target/release/ward-vm

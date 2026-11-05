@@ -1,0 +1,28 @@
+[package]
+name = "ward-vm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Runs a Ward proof's lock with ckb-script under a chain's consensus, as the node would"
+
+# The node's own crates, from the tag mainnet and testnet ran on 2026-11-05 (0.210.0). The
+# ckb-script 1.2.0 on crates.io pins ckb-vm 0.24.14; that tag runs 0.24.15. Move the tag with the
+# node.
+[dependencies]
+ckb-script = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.210.0" }
+ckb-chain-spec = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.210.0" }
+ckb-types = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.210.0" }
+ckb-resource = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.210.0" }
+ckb-mock-tx-types = "=1.1.1"
+serde_json = "1"
+
+# ckb-mock-tx-types reads the mock transaction ckb-debugger also reads; its ckb crates come from
+# the same tag, so there is one ckb-types in the build.
+[patch.crates-io]
+ckb-types = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.210.0" }
+ckb-jsonrpc-types = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.210.0" }
+ckb-traits = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.210.0" }
+
+[profile.release]
+overflow-checks = true

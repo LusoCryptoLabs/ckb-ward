@@ -84,7 +84,17 @@ ckbDebugger({ command: "/root/.cargo/bin/ckb-debugger", wsl: { distro: "Ubuntu" 
 ckbDebugger({ maxCycles: 70_000_000, tmpDir: "/tmp" }); // defaults shown for maxCycles
 ```
 
-ckb-debugger is a development tool. A production verifier should embed `ckb-script` with the target chain's consensus (see section 11 of the spec).
+ckb-debugger is a development tool: its VM version does not follow the chain, and it adds syscalls no node has. For production, `wardVm()` runs `ward-vm` (in `vm/`): the node's own `ckb-script`, from the release mainnet and testnet run (0.210.0), under the chain's consensus at the tip's epoch, with only the node's syscalls (section 11 of the spec).
+
+```sh
+cd vm && cargo build --release   # target/release/ward-vm
+```
+
+```ts
+import { tipEpoch, wardVm } from "ckb-ward";
+const rpcUrl = "https://mainnet.ckb.dev/rpc";
+wardVm({ command: "vm/target/release/ward-vm", chain: "mainnet", epoch: () => tipEpoch(rpcUrl) });
+```
 
 ## Tests
 
@@ -96,7 +106,7 @@ npm test
 
 `tests/vectors/` holds real signed proofs from testnet: secp256k1, the JoyID app, the Cellula smart-account lock (starter and guarded), a 2-of-3 multisig, anyone-can-pay, Omnilock in Dogecoin mode and the Nostr lock. Each is replayed with controls that must be refused: another message, one flipped signature bit, a wrong key, a missing or forged settings cell dep, one multisig signature where two are needed, anyone-can-pay with no signature, an empty witness, and `test_tx_pool_accept` on the node. Other tests cover a smart account with capped keys, an Omnilock whose administrator signs for the owner, locks anyone can open, a lock that prints a fake result, and the verifier's limits, each next to a control that passes.
 
-Without configuration, tests that run a lock are skipped. Set `CKB_DEBUGGER` (the executable) and, on Windows, `CKB_DEBUGGER_WSL` (the WSL distro that has it). Set `CKB_WARD_OFFLINE=1` to skip everything that needs the testnet RPC (`CKB_RPC_URL` overrides it).
+Without configuration, tests that run a lock are skipped. Set `CKB_DEBUGGER` (the executable) and, on Windows, `CKB_DEBUGGER_WSL` (the WSL distro that has it), or `WARD_VM` and `WARD_VM_WSL` for `ward-vm`. With both set, `tests/vm.test.ts` runs every vector under both and checks that they agree. Set `CKB_WARD_OFFLINE=1` to skip everything that needs the testnet RPC (`CKB_RPC_URL` overrides it).
 
 ```sh
 CKB_DEBUGGER=ckb-debugger npm test
@@ -108,9 +118,9 @@ The vectors depend on testnet cell deps staying live.
 
 ## Status
 
-Prototype. Tested on testnet only. The spec is a v1 draft and may change. Not published to npm.
+Prototype, on npm as `ckb-ward`. Vectors are from testnet; mainnet was checked once by hand. The spec is a v1 draft and may change.
 
-Known gaps are listed in section 12 of the spec: JoyID sub-keys and a production VM are untested, mainnet was checked once by hand, and locks with a time condition, or whose signature does not cover the transaction hash, are not covered.
+Known gaps are listed in section 12 of the spec: JoyID sub-keys are untested, and locks with a time condition, or whose signature does not cover the transaction hash, are not covered.
 
 ## License
 

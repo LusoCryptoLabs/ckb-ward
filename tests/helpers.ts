@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
-import { ckbDebugger, parseMessage, type Expect, type RunLock } from "../src/index.ts";
+import { ckbDebugger, parseMessage, tipEpoch, wardVm, type Expect, type RunLock } from "../src/index.ts";
 
 export interface Control {
   about: string;
@@ -43,10 +43,32 @@ export const NO_NETWORK = process.env.CKB_WARD_OFFLINE === "1" ? "CKB_WARD_OFFLI
  */
 const command = process.env.CKB_DEBUGGER;
 const distro = process.env.CKB_DEBUGGER_WSL;
-export const runLock: RunLock | undefined =
+export const debuggerRunLock: RunLock | undefined =
   command || distro ? ckbDebugger({ command, wsl: distro ? { distro, user: process.env.CKB_DEBUGGER_WSL_USER } : undefined }) : undefined;
-export const NO_DEBUGGER = runLock ? false : "set CKB_DEBUGGER or CKB_DEBUGGER_WSL to run locks";
+
+/**
+ * ward-vm (vm/ in this repository): WARD_VM (the executable) or WARD_VM_WSL (a WSL distro holding
+ * it). It runs under testnet's consensus at the tip's epoch, read from the RPC; offline, at
+ * OFFLINE_EPOCH, a testnet epoch of 2026-11-05 (after the 2023 hardfork, like the tip).
+ */
+export const OFFLINE_EPOCH = 14137n;
+const vmCommand = process.env.WARD_VM;
+const vmDistro = process.env.WARD_VM_WSL;
+export const wardVmRunLock: RunLock | undefined =
+  vmCommand || vmDistro
+    ? wardVm({
+        command: vmCommand,
+        wsl: vmDistro ? { distro: vmDistro, user: process.env.WARD_VM_WSL_USER } : undefined,
+        chain: "testnet",
+        epoch: process.env.CKB_WARD_OFFLINE === "1" ? OFFLINE_EPOCH : () => tipEpoch(RPC_URL),
+      })
+    : undefined;
+
+/** The runner the tests use: ckb-debugger when it is set, else ward-vm. */
+export const runLock: RunLock | undefined = debuggerRunLock ?? wardVmRunLock;
+export const NO_DEBUGGER = runLock ? false : "set CKB_DEBUGGER, CKB_DEBUGGER_WSL, WARD_VM or WARD_VM_WSL to run locks";
 export const NO_VM = NO_NETWORK || NO_DEBUGGER;
+export const NO_BOTH = debuggerRunLock && wardVmRunLock ? false : "set both a ckb-debugger and a ward-vm runner to compare them";
 
 /** The same message with one more character in the nonce. */
 export const otherMessage = (message: string) => message.replace(/\nNonce: (.*)$/, "\nNonce: $1x");

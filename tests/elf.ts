@@ -88,6 +88,12 @@ const exit = (code: number) => [...li(A0, code), ...li(A7, SYS_EXIT), ECALL];
 /** Exits 0 whatever the transaction: anyone can open it. */
 export const alwaysSuccess = () => elf(assemble(exit(0)));
 
+/**
+ * Calls syscall 9001, which ckb-debugger adds for development (no node has it), then exits 0.
+ * ckb-debugger runs it to exit 0; a node's VM stops at the unknown syscall.
+ */
+export const debuggerSyscall = () => elf(assemble([...li(A7, 9001), ECALL, ...exit(0)]));
+
 /** Never stops: only the cycle limit ends it. */
 export const endlessLoop = () => elf(assemble([{ label: "top" }, { op: "jal", to: "top" }]));
 
