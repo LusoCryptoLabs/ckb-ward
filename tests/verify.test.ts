@@ -2,8 +2,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
-import { verify, type Expect, type RunLock, type VerifyOptions } from "../src/index.ts";
+import { message, proofTemplate, verify, type Expect, type RunLock, type VerifyOptions } from "../src/index.ts";
 import { expectFor, vectors } from "./helpers.ts";
+import { TESTNET_GENESIS } from "./stub.ts";
 
 const never: RunLock = async () => {
   throw new Error("the lock must not run");
@@ -65,6 +66,25 @@ test("claimNonce runs once, after the free checks and before any chain read", as
   // Claimed, it goes on to the chain.
   await assert.rejects(verify(proof, opts({}, { claimNonce: claim(true) })), /fetch failed|ECONNREFUSED/);
   assert.deepEqual(calls, ["a1b2c3", "a1b2c3"]);
+});
+
+test("an Omnilock with the administrator flag, refused before any chain read", async () => {
+  // Testnet Omnilock (CCC's), owner identity 0x00 + 20 bytes, then the Omnilock flags byte.
+  const omnilock = (flags: number, extra: number) => ({ codeHash: "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb", hashType: "type" as const, args: ccc.hexFrom(ccc.bytesConcat([0], new Uint8Array(20).fill(7), [flags], new Uint8Array(extra))) });
+  const proofOf = (lock: ccc.ScriptLike) => {
+    const text = message({ domain: "dao.example", account: "user-42", lock, chain: TESTNET_GENESIS, issuedAt: "2026-11-04T18:00:00Z", nonce: "a1b2c3" });
+    const tx = proofTemplate(lock, text);
+    tx.witnesses = ["0x"];
+    return { proof: { lock, message: text, tx }, opts: { rpcUrl: UNREACHABLE, runLock: never, expect: expectFor(text) } };
+  };
+  // Admin mode (bit 0), alone and with time lock (bit 2): 32 bytes of admin list type hash, 8 of since.
+  for (const [flags, extra] of [[0x01, 32], [0x05, 40]]) {
+    const { proof, opts } = proofOf(omnilock(flags, extra));
+    assert.equal(await reason(proof, opts), "omnilock in administrator mode: an administrator can sign for it");
+  }
+  // Control: without the flag the same proof goes on to the chain.
+  const plain = proofOf(omnilock(0x00, 0));
+  await assert.rejects(verify(plain.proof, plain.opts), /fetch failed|ECONNREFUSED/);
 });
 
 test("a second witness", async () => {
