@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
-import { mockTransaction, proofInput, proofTemplate, resolveCellDeps, verify, type MockTransaction, type VerifyResult } from "../src/index.ts";
+import { PROOF_INPUT_CAPACITY, mockTransaction, proofInput, proofTemplate, resolveCellDeps, verify, type MockTransaction, type VerifyResult } from "../src/index.ts";
 import { NO_NETWORK, NO_VM, RPC_URL, expectFor, flipWitnessByte, otherMessage, poolAccept, runLock, vectors, type Vector } from "./helpers.ts";
 
 const opts = (message: string) => ({ rpcUrl: RPC_URL, runLock: runLock!, expect: expectFor(message) });
@@ -82,6 +82,37 @@ for (const v of vectors) {
     assert.match(e, /Unknown\(OutPoint\(0x[0-9a-f]{64}ffffffff\)\)/);
   });
 }
+
+test("anyone-can-pay: the path without a signature is real, and only the template closes it", { skip: NO_VM }, async (t) => {
+  // Precondition of controls.noSignature: the refusal (exit -44, no output to pair the input with)
+  // must come from the template, not from a lock that never opens without a signature. The same
+  // empty witness on a transaction the prover built, whose only output is under the same lock and
+  // receives the input's whole capacity, opens the lock. The verifier refuses that transaction at
+  // the template check, before any lock runs.
+  const v = vectors.find((x) => x.file === "anyone-can-pay.json")!;
+  const c = v.controls!.noSignature;
+  const tx = ccc.Transaction.from(c.tx).clone();
+  assert.deepEqual(tx.witnesses, ["0x"]);
+  tx.outputs[0] = ccc.CellOutput.from({ capacity: PROOF_INPUT_CAPACITY, lock: v.lock });
+  tx.outputsData[0] = "0x";
+  const raw = await runRaw(v, tx);
+  t.diagnostic(`no signature, an output under the same lock, lock run directly: exit ${raw.code}, cycles ${raw.cycles}`);
+  assert.equal(raw.code, 0);
+  const r = await verify({ lock: v.lock, message: v.message, tx }, { ...opts(v.message), runLock: async () => assert.fail("no lock run") });
+  assert.match(!r.ok ? r.reason : "", /not the proof template/);
+});
+
+test("multisig: each control keeps the accepted first signature, so the second slot is what fails", () => {
+  // Lock bytes of the 2-of-3 witness: 4 flag bytes, 3 key hashes, then two 65 byte signatures,
+  // after the WitnessArgs header (16 bytes) and the lock's length (4 bytes).
+  const v = vectors.find((x) => x.file === "multisig.json")!;
+  const slot = (tx: ccc.TransactionLike, i: number) => ccc.hexFrom(ccc.bytesFrom(ccc.Transaction.from(tx).witnesses[0]).slice(84 + 65 * i, 149 + 65 * i));
+  const c = v.controls!;
+  for (const name of ["oneSignature", "sameKeyTwice", "wrongKey"]) assert.equal(slot(c[name].tx, 0), slot(v.tx, 0), name);
+  assert.equal(slot(c.oneSignature.tx, 1), ccc.hexFrom(new Uint8Array(65)));
+  assert.equal(slot(c.sameKeyTwice.tx, 1), slot(v.tx, 0));
+  assert.notEqual(slot(c.wrongKey.tx, 1), slot(v.tx, 1));
+});
 
 test("a platform pinned to mainnet, given a testnet node, refuses before reading cells", { skip: NO_NETWORK }, async () => {
   const v = vectors.find((x) => x.file === "secp256k1.json")!;
