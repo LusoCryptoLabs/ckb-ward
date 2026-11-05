@@ -193,7 +193,7 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 - **Locks that read the input's capacity.** They see u64::MAX. A lock that adds it to another amount could overflow and refuse an honest proof.
 - **Locks that need more than one input or more than one witness**, such as an owner lock that needs the owner's cell as a second input.
 - **Type scripts.** Never run. The proof is about the lock only.
-- **Mainnet.** Checked once on 2026-11-04, not as vectors: a proof from a fresh secp256k1 key, and one from a JoyID account signed in the JoyID app, were both accepted against mainnet; replay, another account, one flipped signature byte and a testnet platform were refused, and the mainnet node refused the proof transaction (unknown out point). The JoyID app on mainnet only accepts a requesting page served over https.
+- **Mainnet.** V9 (2026-11-05) is a secp256k1 proof replayed by the tests against mainnet's cell deps, under ckb-debugger and under `ward-vm` with mainnet's consensus. A JoyID proof was accepted against mainnet once by hand on 2026-11-04 and is not a vector. The JoyID app on mainnet only accepts a requesting page served over https.
 - **A production VM in production.** `ward-vm` (section 11) runs the node's script code under the chain's consensus, and every vector agrees with ckb-debugger under it. Running it for a platform, and moving its pin with node upgrades, is the platform's.
 
 ## 13. Locks tested
@@ -203,6 +203,7 @@ All on testnet, under the v1 rules (input at u64::MAX, both probes on): V5 to V8
 | Lock | Signer | Result | Cycles | Controls, refused | In repo |
 | --- | --- | --- | --- | --- | --- |
 | secp256k1_blake160 | CCC private key signer | accepted | 1,645,417 | wrong key, exit -31 | V1 |
+| secp256k1_blake160, MAINNET (2026-11-05) | CCC private key signer, mainnet cell deps | accepted | 1,653,447 | wrong key -31; flipped signature bit -31; a testnet platform, message names another chain | V9 |
 | JoyID, main key | JoyID app (testnet.joyid.dev) | accepted | 6,905,201 | flipped signature bit, exit 11 | V2 |
 | Cellula smart account, starter | software P-256 key, wallet's WebAuthn shape | accepted | 6,772,215 | wrong key, exit 26 | V3 |
 | Cellula smart account, guarded | software P-256 key | accepted | 6,755,721 | wrong key 26; no Config Cell 21; forged Config Cell refused by rule 1 | V4 |
@@ -232,7 +233,7 @@ The v0 draft had a second template for wallets that look inputs up on chain: a l
 
 ## Appendix: test vectors
 
-Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points, and every vector is valid only while they stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04 (V1 to V4) and 2026-11-05 (V5 to V8). V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4); the signed bytes are the v0 ones.
+Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points (V9: mainnet), and every vector is valid only while they stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04 (V1 to V4) and 2026-11-05 (V5 to V8). V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4); the signed bytes are the v0 ones.
 
 ### V1. secp256k1
 
@@ -801,3 +802,46 @@ Expected:
 - `controls.wrongKey` (another Nostr key signed): lock exit 26 (`PubkeyNotFound`, the event's author is not the lock's key)
 - probe (a), the same transaction with an empty witness: lock exit 4; probe (b) is the other-message line above
 - `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V9. secp256k1, mainnet
+
+File: `tests/vectors/mainnet-secp256k1.json`. Default CKB lock on mainnet. Random key made for the test (no funds, never used again), signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction) against mainnet's cell deps, 2026-11-05.
+
+Lock:
+
+```json
+{
+  "codeHash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+  "hashType": "type",
+  "args": "0x72a976a719667c6cd49f633d669e1c6623500041"
+}
+```
+
+Lock hash: `0x5cc6ed103d09f6c25703f012b04253ca3d08124cac7824c5ded5d0de6ea5ad12`
+
+Message (272 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-42
+Lock hash: 0x5cc6ed103d09f6c25703f012b04253ca3d08124cac7824c5ded5d0de6ea5ad12
+Chain: 0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5
+Issued at: 2026-11-05T22:00:00.000Z
+Nonce: m1b2c3
+```
+
+Out point tx hash P: `0x2fad38281cca96dd4ffc4651aea60ffbb06debd91fd98c335776712373dc0e09`
+
+Transaction hash: `0x16d6d554e7054dcee3ea340e7456392b05d00b89ddd9bdaa6828d448b4a9e866`
+
+Cell deps: mainnet's secp256k1 dep group `0x71a7ba8fc96349fea0ed3a5c47992e3b4084b031a42264a018e0072e8172e46c:0`.
+
+Expected, against mainnet (ckb-debugger, and `ward-vm` under mainnet's consensus, which agree):
+
+- the proof: accepted, 1,653,447 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31
+- bit 0 of witness byte 30 flipped: lock exit -31
+- `controls.wrongKey` (a second random key signed): lock exit -31
+- probe (a), the same transaction with an empty witness: lock exit -2
+- a platform pinned to testnet: refused before any chain read, message names another chain
+- `test_tx_pool_accept` on mainnet: refused, `Unknown(OutPoint(<P>ffffffff))`

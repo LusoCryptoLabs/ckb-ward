@@ -1,0 +1,114 @@
+{
+  "name": "secp256k1 (mainnet)",
+  "about": "Default CKB lock on MAINNET. Random key made for the test (no funds, never used again), signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction) against mainnet's cell deps. Mainnet, 2026-11-05.",
+  "network": "mainnet",
+  "lock": {
+    "codeHash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+    "hashType": "type",
+    "args": "0x72a976a719667c6cd49f633d669e1c6623500041"
+  },
+  "message": "dao.example wants you to prove control of a CKB lock.\nAccount: user-42\nLock hash: 0x5cc6ed103d09f6c25703f012b04253ca3d08124cac7824c5ded5d0de6ea5ad12\nChain: 0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5\nIssued at: 2026-11-05T22:00:00.000Z\nNonce: m1b2c3",
+  "tx": {
+    "version": "0x0",
+    "cellDeps": [
+      {
+        "outPoint": {
+          "txHash": "0x71a7ba8fc96349fea0ed3a5c47992e3b4084b031a42264a018e0072e8172e46c",
+          "index": "0x0"
+        },
+        "depType": "depGroup"
+      }
+    ],
+    "headerDeps": [],
+    "inputs": [
+      {
+        "previousOutput": {
+          "txHash": "0x2fad38281cca96dd4ffc4651aea60ffbb06debd91fd98c335776712373dc0e09",
+          "index": "0xffffffff"
+        },
+        "since": "0x0",
+        "cellOutput": {
+          "capacity": "0xffffffffffffffff",
+          "lock": {
+            "codeHash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+            "hashType": "type",
+            "args": "0x72a976a719667c6cd49f633d669e1c6623500041"
+          }
+        },
+        "outputData": "0x"
+      }
+    ],
+    "outputs": [
+      {
+        "capacity": "0x749a01900",
+        "lock": {
+          "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "hashType": "data",
+          "args": "0x"
+        }
+      }
+    ],
+    "outputsData": [
+      "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d34320a4c6f636b20686173683a203078356363366564313033643039663663323537303366303132623034323533636133643038313234636163373832346335646564356430646536656135616431320a436861696e3a203078393262313937616131666261306636333633333932326336316339323337356339633037346139336538353936333535346635343939666531343530643065350a4973737565642061743a20323032362d31312d30355432323a30303a30302e3030305a0a4e6f6e63653a206d3162326333"
+    ],
+    "witnesses": [
+      "0x5500000010000000550000005500000041000000198656ab697e191d92538ebbad175e47dc2486ce052a826febdad61d8973753d5954e9ba78b4d0f535f5fce1a333506de3ab12443d3c10e5ea4bc19214bfcddd00"
+    ]
+  },
+  "signatureByte": 30,
+  "otherMessageExit": -31,
+  "signatureFlipExit": -31,
+  "controls": {
+    "wrongKey": {
+      "about": "A second random key signs the same template for the first key's lock.",
+      "exit": -31,
+      "tx": {
+        "version": "0x0",
+        "cellDeps": [
+          {
+            "outPoint": {
+              "txHash": "0x71a7ba8fc96349fea0ed3a5c47992e3b4084b031a42264a018e0072e8172e46c",
+              "index": "0x0"
+            },
+            "depType": "depGroup"
+          }
+        ],
+        "headerDeps": [],
+        "inputs": [
+          {
+            "previousOutput": {
+              "txHash": "0x2fad38281cca96dd4ffc4651aea60ffbb06debd91fd98c335776712373dc0e09",
+              "index": "0xffffffff"
+            },
+            "since": "0x0",
+            "cellOutput": {
+              "capacity": "0xffffffffffffffff",
+              "lock": {
+                "codeHash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+                "hashType": "type",
+                "args": "0x72a976a719667c6cd49f633d669e1c6623500041"
+              }
+            },
+            "outputData": "0x"
+          }
+        ],
+        "outputs": [
+          {
+            "capacity": "0x749a01900",
+            "lock": {
+              "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "hashType": "data",
+              "args": "0x"
+            }
+          }
+        ],
+        "outputsData": [
+          "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d34320a4c6f636b20686173683a203078356363366564313033643039663663323537303366303132623034323533636133643038313234636163373832346335646564356430646536656135616431320a436861696e3a203078393262313937616131666261306636333633333932326336316339323337356339633037346139336538353936333535346635343939666531343530643065350a4973737565642061743a20323032362d31312d30355432323a30303a30302e3030305a0a4e6f6e63653a206d3162326333"
+        ],
+        "witnesses": [
+          "0x55000000100000005500000055000000410000007e9214172ea2c1f8c44bf59e86bde0b36a6cc4f27532c2dca4f7b3e5e4bc0a4d19684147830ecee4edf52b38226f3803190c7088239440d1324c392c7ba64dd000"
+        ]
+      }
+    }
+  }
+}

@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
 import { message, mockTransaction, parseWardVmRun, proofInput, proofTemplate, resolveCellDeps, verify, type RunLock } from "../src/index.ts";
 import { alwaysSuccess, debuggerSyscall, password } from "./elf.ts";
-import { NO_BOTH, NO_NETWORK, RPC_URL, debuggerRunLock, expectFor, flipWitnessByte, vectors, wardVmRunLock } from "./helpers.ts";
+import { NO_BOTH, NO_NETWORK, debuggerRunLock, expectFor, flipWitnessByte, rpcFor, vectors, wardVmFor, wardVmRunLock } from "./helpers.ts";
 import { TESTNET_GENESIS, startStub, type Stub } from "./stub.ts";
 
 const NO_WARD_VM = wardVmRunLock ? false : "set WARD_VM or WARD_VM_WSL to run ward-vm";
@@ -87,17 +87,18 @@ test("a syscall only ckb-debugger has: the debugger exits 0, ward-vm stops as a 
 for (const v of vectors) {
   test(`${v.name}: ckb-debugger and ward-vm agree, accepted and with one bit flipped`, { skip: NO_NETWORK || NO_BOTH }, async (t) => {
     const lock = ccc.Script.from(v.lock);
-    const deps = await resolveCellDeps(RPC_URL, ccc.Transaction.from(v.tx).cellDeps);
+    const vm = wardVmFor(v)!;
+    const deps = await resolveCellDeps(rpcFor(v), ccc.Transaction.from(v.tx).cellDeps);
     for (const [label, tx] of [
       ["accepted", ccc.Transaction.from(v.tx)],
       ["bit flipped", flipWitnessByte(v.tx, v.signatureByte)],
     ] as const) {
       const mock = mockTransaction(tx, proofInput(lock), deps);
-      const [dbg, vm] = [await debuggerRunLock!(mock), await wardVmRunLock!(mock)];
-      t.diagnostic(`${label}: ckb-debugger ${dbg.code} (${dbg.cycles}), ward-vm ${vm.code} (${vm.cycles})`);
-      assert.equal(vm.code, dbg.code);
-      assert.equal(vm.cycles, dbg.cycles);
+      const [dbg, run] = [await debuggerRunLock!(mock), await vm(mock)];
+      t.diagnostic(`${label}: ckb-debugger ${dbg.code} (${dbg.cycles}), ward-vm ${run.code} (${run.cycles})`);
+      assert.equal(run.code, dbg.code);
+      assert.equal(run.cycles, dbg.cycles);
     }
-    assert.equal((await verify({ lock: v.lock, message: v.message, tx: v.tx }, { rpcUrl: RPC_URL, runLock: wardVmRunLock!, expect: expectFor(v.message) })).ok, true);
+    assert.equal((await verify({ lock: v.lock, message: v.message, tx: v.tx }, { rpcUrl: rpcFor(v), runLock: vm, expect: expectFor(v.message) })).ok, true);
   });
 }
