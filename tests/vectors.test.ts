@@ -102,6 +102,18 @@ test("anyone-can-pay: the path without a signature is real, and only the templat
   assert.match(!r.ok ? r.reason : "", /not the proof template/);
 });
 
+test("multisig: each control keeps the accepted first signature, so the second slot is what fails", () => {
+  // Lock bytes of the 2-of-3 witness: 4 flag bytes, 3 key hashes, then two 65 byte signatures,
+  // after the WitnessArgs header (16 bytes) and the lock's length (4 bytes).
+  const v = vectors.find((x) => x.file === "multisig.json")!;
+  const slot = (tx: ccc.TransactionLike, i: number) => ccc.hexFrom(ccc.bytesFrom(ccc.Transaction.from(tx).witnesses[0]).slice(84 + 65 * i, 149 + 65 * i));
+  const c = v.controls!;
+  for (const name of ["oneSignature", "sameKeyTwice", "wrongKey"]) assert.equal(slot(c[name].tx, 0), slot(v.tx, 0), name);
+  assert.equal(slot(c.oneSignature.tx, 1), ccc.hexFrom(new Uint8Array(65)));
+  assert.equal(slot(c.sameKeyTwice.tx, 1), slot(v.tx, 0));
+  assert.notEqual(slot(c.wrongKey.tx, 1), slot(v.tx, 1));
+});
+
 test("a platform pinned to mainnet, given a testnet node, refuses before reading cells", { skip: NO_NETWORK }, async () => {
   const v = vectors.find((x) => x.file === "secp256k1.json")!;
   const mainnet = "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5";
