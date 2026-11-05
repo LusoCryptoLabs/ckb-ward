@@ -90,7 +90,7 @@ Input: the claimed lock L, the message M, the signed transaction T, and the plat
 1. Refuse when E or any field of it is missing.
 2. Parse M (section 3). Refuse when malformed.
 3. Refuse unless M equals E's message byte for byte.
-4. Refuse unless the lock hash line equals the lock hash of L.
+4. Refuse unless the lock hash line equals the lock hash of L. Refuse when L is an Omnilock with the administrator flag (section 6, rule 6).
 5. Refuse unless the domain, account, nonce and chain lines equal E's, `now - issued at` is within E's window, and `issued at` is not more than 60 seconds ahead of `now`.
 6. Refuse unless T has exactly one witness, T's serialized size in a block (its bytes plus 4) is at most 597,000, the witness is at most 65,536 bytes, T lists at most 16 cell deps, and no out point appears twice among them (section 7).
 7. Build the template of section 4 from (L, M) and copy T's cell deps into it. Refuse unless its transaction hash equals T's. The transaction hash covers every field but the witnesses, so this one comparison checks every value in section 4.
@@ -114,6 +114,8 @@ Each rule was found while building or reviewing this. A verifier that breaks one
 **Rule 4: no exclusive control, no proof.** A lock that accepts the template with an empty witness opens for anyone (an always-success lock). A lock that accepts the same witness on another message's template does not bind its witness to the message (a lock opened by a password or a hash preimage), so anyone who has seen one proof can make another. Neither shows control by one holder, and binding such a lock would let anyone claim the deposits under it. Measured with locks assembled for the tests (`tests/probes.test.ts`): an always-success lock and a 4 byte password lock are accepted with the probes off and refused with them on. Every real lock in section 13 passes them. The probes stop locks that are open by construction; a lock written to tell a probe from a real proof could still pass them.
 
 **Rule 5: read the VM's result, not text the lock printed.** A lock can print through the debug syscall, and ckb-debugger writes that text to stdout as `Script log: ...` with its line feeds kept, so it can print lines that look like the debugger's own. The v0 runner took the first `Run result:` anywhere in stdout and stderr together, and accepted a lock that printed `Run result: 0` and then exited 1 (measured). The runner now reads stdout and stderr apart, takes only the last two lines of stdout (`Run result: <code>`, `All cycles: <n>`), and counts exit 0 only when the debugger process also exits 0 (ckb-debugger 1.1.1 exits 254 for any other result, measured). An embedded VM avoids the question: it returns the exit code itself.
+
+**Rule 6: no lock an administrator can open.** An Omnilock whose flags byte (args byte 21) has bit 0 set carries the type hash of an admin list cell, which holds SMT roots of identities. A witness that names an identity on that list, with its SMT proof, is checked against that identity's signature instead of the owner's. The administrator creates and controls the list cell, so reading deps from the chain (rule 1) does not stop it, and one list can serve many locks: one admin key would prove every lock that names it. Measured on both live testnet Omnilock deployments (CCC's, code data hash `0x6b29b6f1...`, and the 2022 one), with fresh keys and a list cell fabricated in a local node stub (`tests/omnilock-admin.test.ts`): the admin's key, naming the admin's identity, opens a lock whose owner is another key (exit 0, about 1.5 million cycles), passes both probes, and `verify()` without this rule accepts it. Controls on the same lock: the owner's key exits 0 on CCC's deployment (the 2022 one stops the VM, `write on executable page`, while the same owner without the flag exits 0); a key not on the list naming itself exits 59 (not on the whitelist); the same key naming the admin's identity exits -31 (the signature does not match it); the admin's proof re-signed without the list cell exits 1 (no cell with that type hash). The verifier refuses such a lock at step 4, before any chain read, for the owner's proofs too. It recognises Omnilock by code hash (`OMNILOCK_CODE_HASHES`: the testnet and mainnet type hashes and the data hashes of the three testnet binaries); a copy deployed under another code hash is not recognised.
 
 ## 7. Limits
 
@@ -174,7 +176,7 @@ Wallets SHOULD detect the proof shape: exactly one input, at index 0xffffffff, w
 
 ## 11. VM and consensus
 
-What was used here: ckb-debugger 1.1.1 (script version 2, cycle limit set to 70,000,000; its default is 3,500,000,000), run inside WSL on Windows, with cell deps read from `https://testnet.ckb.dev/rpc` on 2026-11-04. The mock transaction format is ckb-debugger's.
+What was used here: ckb-debugger 1.1.1 (script version 2, cycle limit set to 70,000,000; its default is 3,500,000,000), run inside WSL on Windows, with cell deps read from `https://testnet.ckb.dev/rpc` on 2026-11-04 and 2026-11-05. The mock transaction format is ckb-debugger's.
 
 ckb-debugger is a development tool. It picks the VM version from `hash_type` for `data`, `data1` and `data2` (measured: a program with a B extension instruction is refused under `data` and runs under `data1` and `data2`); for `type` it uses its `--script-version` option, not the chain's current epoch. A production verifier should embed `ckb-script` (the crate the node uses to verify scripts) with the target chain's consensus and the hardfork switch at the current epoch, so the VM version, syscalls and `hash_type` resolution match what the node would do for a real spend. Keep it in step with node upgrades.
 
@@ -183,7 +185,6 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 ## 12. Not covered
 
 - **JoyID sub-keys.** Untested. Sub-key proofs depend on a CoTA cell dep.
-- **Omnilock administrator mode.** In an Omnilock whose args carry an administrator root (`omni_root`), the witness may name an administrator identity, proven against regulation-compliance rules, and the lock then checks that identity's signature instead of the owner's. Reading the source suggests an administrator could therefore prove the lock. Untested.
 - **Locks with a time condition.** The template has since 0. Measured: an Omnilock in time-lock mode refuses it (exit -24), so such a lock cannot be proven with this template.
 - **Locks whose signature does not cover the transaction hash.** Probe (b) refuses a witness that opens another message; a lock that signs something else could still pass it.
 - **Locks that read header deps.** The template has none, so the result can differ from a real spend.
@@ -196,7 +197,7 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 
 ## 13. Locks tested
 
-All on testnet, 2026-11-04, under the v1 rules (input at u64::MAX, both probes on). "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
+All on testnet, 2026-11-04 (the Omnilock administrator rows 2026-11-05), under the v1 rules (input at u64::MAX, both probes on). "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
 
 | Lock | Signer | Result | Cycles | Controls, refused | In repo |
 | --- | --- | --- | --- | --- | --- |
@@ -208,6 +209,8 @@ All on testnet, 2026-11-04, under the v1 rules (input at u64::MAX, both probes o
 | multisig 2-of-3 | CCC multisig signer, 2 members | accepted | 3,143,506 | one signature only, exit -11 | no |
 | anyone-can-pay | software key | accepted | 1,602,958 | no signature -44; zeroed signature -11 | no |
 | Omnilock, Dogecoin mode | CCC Doge signer | accepted | 1,445,766 | another key, exit -31 | no |
+| Omnilock, administrator mode, CCC's deployment | software keys, admin list cell fabricated in a local node stub | the lock accepts the admin's key (exit 0) and the owner's (exit 0); the verifier refuses both, rule 6 | about 1.5 million | not on the list 59; not on the list, naming the admin -31; no list cell 1 | test |
+| Omnilock, administrator mode, 2022 deployment | as above | the lock accepts the admin's key (exit 0); the owner's stops the VM; the verifier refuses both, rule 6 | about 1.5 million | as above | test |
 | Nostr lock | CCC Nostr signer | accepted | 4,170,082 | another key, exit 26 | no |
 | JoyID, main key | software P-256 key in JoyID's format | accepted | 6,729,097 | another key, exit 6 | no |
 | always-success, assembled | none | refused by probe (a) | | accepted with the probes off | test |

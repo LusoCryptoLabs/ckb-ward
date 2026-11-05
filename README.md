@@ -19,6 +19,7 @@ Running the lock itself needs neither. Any wallet that can sign an ordinary tran
 - The only input points at an out point that cannot exist: `tx_hash = ckbhash("CKB lock proof v0\n" || lock hash || message)`, `index = 0xffffffff`. The verifier resolves it to `{ capacity u64::MAX, the claimed lock }`, so a key that may only move part of an account cannot prove it. One output under an all-zero lock carries the message.
 - The message names the platform, the account, the lock hash, the chain's genesis hash, the time and a single-use nonce.
 - After the lock accepts, the verifier runs it twice more, with an empty witness and with the same witness on another message. A lock that opens either way is open to anyone, and the proof is refused.
+- An Omnilock in administrator mode is refused: any key on its admin list opens it, the owner's lock included.
 
 Nodes refuse the proof as `Unknown(OutPoint)`. So a node cannot verify a proof either; the verifier needs a VM.
 
@@ -51,7 +52,7 @@ const result = await verify(
 // { ok: true, fields, cycles, cellDeps } or { ok: false, reason, run? }
 ```
 
-`verify` refuses when `expect` is missing, when the message is not the one issued, when the transaction is not exactly the template the verifier builds, when it breaks a limit (cell deps, dep group members, size), when a cell dep is not live on the chain, when the lock exits non-zero, or when the lock also opens without the owner. It throws only when the node cannot be reached or the runner cannot start. `cellDeps` lists the cells the proof ran with; a binding stays valid while they are live.
+`verify` refuses when `expect` is missing, when the message is not the one issued, when the lock is an Omnilock in administrator mode, when the transaction is not exactly the template the verifier builds, when it breaks a limit (cell deps, dep group members, size), when a cell dep is not live on the chain, when the lock exits non-zero, or when the lock also opens without the owner. It throws only when the node cannot be reached or the runner cannot start. `cellDeps` lists the cells the proof ran with; a binding stays valid while they are live.
 
 Verifying is the easy half. A platform that counts weight from bindings also needs the rules of section 9 of the spec: one active binding per lock, bindings frozen while a vote is open, weight read at one snapshot block from Nervos DAO deposits only.
 
@@ -77,7 +78,7 @@ npm run typecheck
 npm test
 ```
 
-`tests/vectors/` holds real signed proofs from testnet: secp256k1, the JoyID app and the Cellula smart-account lock (starter and guarded). Each is replayed with controls that must be refused: another message, one flipped signature bit, a wrong key, a missing or forged settings cell dep, an empty witness, and `test_tx_pool_accept` on the node. Other tests cover a smart account with capped keys, locks anyone can open, a lock that prints a fake result, and the verifier's limits, each next to a control that passes.
+`tests/vectors/` holds real signed proofs from testnet: secp256k1, the JoyID app and the Cellula smart-account lock (starter and guarded). Each is replayed with controls that must be refused: another message, one flipped signature bit, a wrong key, a missing or forged settings cell dep, an empty witness, and `test_tx_pool_accept` on the node. Other tests cover a smart account with capped keys, an Omnilock whose administrator signs for the owner, locks anyone can open, a lock that prints a fake result, and the verifier's limits, each next to a control that passes.
 
 Without configuration, tests that run a lock are skipped. Set `CKB_DEBUGGER` (the executable) and, on Windows, `CKB_DEBUGGER_WSL` (the WSL distro that has it). Set `CKB_WARD_OFFLINE=1` to skip everything that needs the testnet RPC (`CKB_RPC_URL` overrides it).
 
@@ -93,7 +94,7 @@ The vectors depend on testnet cell deps staying live.
 
 Prototype. Tested on testnet only. The spec is a v1 draft and may change. Not published to npm.
 
-Known gaps are listed in section 12 of the spec: JoyID sub-keys, Omnilock administrator mode and a production VM are untested, mainnet was checked once by hand, and locks with a time condition, or whose signature does not cover the transaction hash, are not covered.
+Known gaps are listed in section 12 of the spec: JoyID sub-keys and a production VM are untested, mainnet was checked once by hand, and locks with a time condition, or whose signature does not cover the transaction hash, are not covered.
 
 ## License
 
