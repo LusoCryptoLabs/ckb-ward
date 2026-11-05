@@ -107,7 +107,7 @@ Each rule was found while building or reviewing this. A verifier that breaks one
 
 **Rule 1: cell deps come from the chain as live cells, never from the prover.** A lock's behaviour depends on its deps. For a lock with `hash_type` type, the code is found by type script hash, so a forged dep can carry any code. Some locks also read settings from deps. Measured with the Cellula smart-account lock, whose guarded form reads its authenticators from a Config Cell given as a cell dep: a proof signed by a key that is not an authenticator, sent with a forged copy of the Config Cell that lists that key, is **accepted** by the lock (exit 0) when the verifier uses the prover's copy. Read from the chain, the forged out point is not live and the proof is refused (vector V4, `forgedConfig`).
 
-**Rule 2: the verifier builds the template.** If the verifier took any transaction whose input 0 is under L, the prover could add inputs, outputs or header deps that make L accept without the owner's key. Owner-lock style locks accept when another input carries a given lock hash. Proxy-lock style locks accept when a given cell is present. The anyone-can-pay lock accepts without a signature when an output under the same lock receives more. The template allows one input, one output and no header deps, so none of these paths opens. Measured with the template: the anyone-can-pay lock with no signature is refused (exit -44). The attacks with a prover-built transaction are reasoning, not measured here.
+**Rule 2: the verifier builds the template.** If the verifier took any transaction whose input 0 is under L, the prover could add inputs, outputs or header deps that make L accept without the owner's key. Owner-lock style locks accept when another input carries a given lock hash. Proxy-lock style locks accept when a given cell is present. The anyone-can-pay lock accepts without a signature when an output under the same lock receives more. The template allows one input, one output and no header deps, so none of these paths opens. Measured with the anyone-can-pay lock (vector V6): with no signature it refuses the template (exit -44, no output to pair the input with), and it accepts the same empty witness (exit 0) on a transaction whose only output is under the same lock and receives the input's whole capacity, which the template check refuses. The owner-lock and proxy-lock attacks are reasoning, not measured here.
 
 **Rule 3: the input is a constant of the verifier, at u64::MAX.** Never a cell the prover names, and never a smaller capacity: a lock that caps what a key may move must see the whole account leave (section 4).
 
@@ -127,7 +127,7 @@ A proof is untrusted input that makes the verifier read the chain and run code. 
 | an out point listed twice | refused | The node refuses it (`DuplicateCellDeps`). Without it, the first review made one proof list a dep group of 1,000 members 15 times: 15,018 cell reads. |
 | cells listed by dep groups | 32 in total, counted from the groups' data before any member is read; each member read once | The secp256k1 dep group, the largest measured, lists 2. The node itself allows 2,048 expanded deps (measured by the review: 2,048 accepted, 2,049 refused with `OverMaxDepExpansionLimit`), but only after reading every member. |
 | transaction size | 597,000 bytes as serialized in a block (the transaction's bytes plus a 4 byte offset) | The consensus block limit. Measured on testnet: at 597,000 the node goes past that check, at 597,001 it refuses with `ExceededMaximumBlockBytes`. The node's pool refuses above 512,000 (measured), a node setting. |
-| witness | 65,536 bytes; a verifier may raise it for a lock with larger signatures | The largest measured is 540 (smart account). It leaves room for post-quantum signatures: SLH-DSA 256f is 49,856 bytes by its parameter set (not measured here). |
+| witness | 65,536 bytes; a verifier may raise it for a lock with larger signatures | The largest measured is 592 (Nostr lock, a signed event as JSON). It leaves room for post-quantum signatures: SLH-DSA 256f is 49,856 bytes by its parameter set (not measured here). |
 | message | 1,024 bytes | Section 3. |
 | each chain read | a timeout, 10 seconds by default | A slow or stalled node would hold the verifier. |
 | each lock run | a cycle limit, 70,000,000 here | The largest proof measured took 6,905,201 cycles (JoyID, real app). |
@@ -196,7 +196,7 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 
 ## 13. Locks tested
 
-All on testnet, 2026-11-04 (the Omnilock administrator rows 2026-11-05), under the v1 rules (input at u64::MAX, both probes on). "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
+All on testnet, under the v1 rules (input at u64::MAX, both probes on): V5 to V8 and the Omnilock administrator rows on 2026-11-05, the rest on 2026-11-04. "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
 
 | Lock | Signer | Result | Cycles | Controls, refused | In repo |
 | --- | --- | --- | --- | --- | --- |
@@ -205,12 +205,12 @@ All on testnet, 2026-11-04 (the Omnilock administrator rows 2026-11-05), under t
 | Cellula smart account, starter | software P-256 key, wallet's WebAuthn shape | accepted | 6,772,215 | wrong key, exit 26 | V3 |
 | Cellula smart account, guarded | software P-256 key | accepted | 6,755,721 | wrong key 26; no Config Cell 21; forged Config Cell refused by rule 1 | V4 |
 | Cellula smart account, guarded, with per-transaction caps | software P-256 keys, Config Cell fabricated in a local node stub | key with no cap accepted; keys capped at 100 and 1,000 CKB refused, exit 27 | about 6.8 million | key not in the Config Cell, exit 26 | test |
-| multisig 2-of-3 | CCC multisig signer, 2 members | accepted | 3,143,506 | one signature only, exit -11 | no |
-| anyone-can-pay | software key | accepted | 1,602,958 | no signature -44; zeroed signature -11 | no |
-| Omnilock, Dogecoin mode | CCC Doge signer | accepted | 1,445,766 | another key, exit -31 | no |
+| multisig 2-of-3 | CCC multisig signer, 2 members | accepted | 3,143,655 | one signature only -11; one key twice -52; a member and a non-member -52; flipped signature bit -52 | V5 |
+| anyone-can-pay | CCC private key signer | accepted | 1,610,026 | no signature -44; another key -31; flipped signature bit -31 | V6 |
+| Omnilock, Dogecoin mode | CCC Doge signer | accepted | 1,462,047 | another key -31; flipped signature bit -31 | V7 |
 | Omnilock, administrator mode, CCC's deployment | software keys, admin list cell fabricated in a local node stub | the lock accepts the admin's key (exit 0) and the owner's (exit 0); the verifier refuses both, rule 6 | about 1.5 million | not on the list 59; not on the list, naming the admin -31; no list cell 1 | test |
 | Omnilock, administrator mode, 2022 deployment | as above | the lock accepts the admin's key (exit 0); the owner's stops the VM; the verifier refuses both, rule 6 | about 1.5 million | as above | test |
-| Nostr lock | CCC Nostr signer | accepted | 4,170,082 | another key, exit 26 | no |
+| Nostr lock | CCC Nostr signer | accepted | 4,169,370 | another key 26; flipped signature bit 18 | V8 |
 | JoyID, main key | software P-256 key in JoyID's format | accepted | 6,729,097 | another key, exit 6 | no |
 | always-success, assembled | none | refused by probe (a) | | accepted with the probes off | test |
 | 4 byte password, assembled | the password | refused by probe (b) | | accepted with the probes off; empty witness exit 2 | test |
@@ -229,7 +229,7 @@ The v0 draft had a second template for wallets that look inputs up on chain: a l
 
 ## Appendix: test vectors
 
-Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points, and every vector is valid only while they stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04. Exit codes are the lock's own. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4); the signed bytes are the v0 ones.
+Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points, and every vector is valid only while they stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04 (V1 to V4) and 2026-11-05 (V5 to V8). V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4); the signed bytes are the v0 ones.
 
 ### V1. secp256k1
 
@@ -624,5 +624,177 @@ Expected:
 - `controls.wrongKey` (another key signed): lock exit 26
 - `controls.missingConfig` (right key, Config Cell dep left out): lock exit 21
 - `controls.forgedConfig` (other key, forged Config Cell at an out point that does not exist): refused, cell dep not live; with the prover's copy of that dep the lock exits 0, which is why rule 1 exists
+- probe (a), the same transaction with an empty witness: lock exit 4; probe (b) is the other-message line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V5. secp256k1 multisig, 2 of 3
+
+File: `tests/vectors/multisig.json`. secp256k1 multisig, 2 of 3 members (CCC `Secp256k1MultisigV2`, `hash_type` data1). Three random keys made for the test; members 0 and 2 signed with an unmodified CCC SignerMultisigCkbPrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-05.
+
+Lock:
+
+```json
+{
+  "codeHash": "0x36c971b8d41fbd94aabca77dc75e826729ac98447b46f91e00796155dddb0d29",
+  "hashType": "data1",
+  "args": "0xf802e80ecc4c78fed3b8bbe8cdb7eb95db108087"
+}
+```
+
+Lock hash: `0x7edc09c63cbc4a31a4accf4ce73609390670956c519b1023aa790e4e1d34d513`
+
+Message (266 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-ms
+Lock hash: 0x7edc09c63cbc4a31a4accf4ce73609390670956c519b1023aa790e4e1d34d513
+Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+Issued at: 2026-11-05T12:00:00Z
+Nonce: n-ms
+```
+
+Out point tx hash P: `0xa355a13ea6dd735b939988f53169961745a3df530f2fc3f089572acfc53e4754`
+
+Transaction hash: `0x7103e88d47d02b2614cafd61f1d135b932c4dab3f94ced8463825113278eca82`
+
+Cell deps: the multisig dep group `0x2eefdeb21f3a3edf697c28a52601b4419806ed60bb427420455cc29a090b26d5:0`.
+
+Expected:
+
+- the proof: accepted, 3,143,655 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -52 (`ERROR_VERIFICATION`, the recovered key is not a member)
+- bit 0 of witness byte 124 (in the s half of signature 0) flipped: lock exit -52
+- `controls.oneSignature` (member 0 alone, the second slot left as zeros, as CCC leaves it): lock exit -11 (`ERROR_SECP_RECOVER_PUBKEY` on the empty second slot)
+- `controls.sameKeyTwice` (member 0's signature in both slots): lock exit -52 (`ERROR_VERIFICATION`, a member counts once)
+- `controls.wrongKey` (member 0 and a key that is not a member): lock exit -52
+- in all three controls the first slot is byte for byte the first signature of the accepted proof, so the refusal comes from the second slot
+- probe (a), the same transaction with an empty witness: lock exit -2; probe (b) is the other-message line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V6. anyone-can-pay
+
+File: `tests/vectors/anyone-can-pay.json`. anyone-can-pay lock with the owner's key hash as args and no minimums. Random key made for the test, signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction), which signs anyone-can-pay inputs of its key. Testnet, 2026-11-05.
+
+Lock:
+
+```json
+{
+  "codeHash": "0x3419a1c09eb2567f6552ee7a8ecffd64155cffe0f1796e6e61ec088d740c1356",
+  "hashType": "type",
+  "args": "0x7cedbdb76a9575c711cdfd80c3527e2860c6dc83"
+}
+```
+
+Lock hash: `0xcdebf3a1bd32f07a56f80d26f3a08a407275cbe9167b7ca673422251ca654bcb`
+
+Message (268 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-acp
+Lock hash: 0xcdebf3a1bd32f07a56f80d26f3a08a407275cbe9167b7ca673422251ca654bcb
+Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+Issued at: 2026-11-05T12:00:00Z
+Nonce: n-acp
+```
+
+Out point tx hash P: `0x2d20b60eb3b42e5eb419a7af928bf95c9126afed7ae1113528fbdb6e1e46d3d5`
+
+Transaction hash: `0x9a9d9d90622c6fc31ad11b5ad3c062fa322962a7834d37ed2cab561955c723ce`
+
+Cell deps: the anyone-can-pay dep group `0xec26b0f85ed839ece5f11c4c4e837ec359f5adc4420410f6453b1f6b60fb96a6:0`.
+
+Expected:
+
+- the proof: accepted, 1,610,026 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31 (`ERROR_PUBKEY_BLAKE160_HASH`)
+- bit 0 of witness byte 60 (in the s half of the signature) flipped: lock exit -31
+- `controls.wrongKey` (another key signed the same sighash): lock exit -31
+- `controls.noSignature` (empty witness): lock exit -44 (`ERROR_NO_PAIR`: with no signature the lock takes its payment path, and the template has no output under the lock to pair the input with). The same empty witness on a transaction whose only output is under the lock and holds u64::MAX exits 0; the template check refuses that transaction (rule 2)
+- probe (a), the same transaction with an empty witness: the `noSignature` line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V7. Omnilock, Dogecoin mode
+
+File: `tests/vectors/omnilock-doge.json`. Omnilock with a Dogecoin identity (flag 0x05, no Omnilock modes). Random key made for the test, signed with an unmodified CCC SignerDogePrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-05.
+
+Lock:
+
+```json
+{
+  "codeHash": "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb",
+  "hashType": "type",
+  "args": "0x050ffa745d9c337cf15ef4ee5b5dc8672ea19b3fa900"
+}
+```
+
+Lock hash: `0x4bc158c10fca14a6cca6e5273ea5db0bb3d06ad0b3b508bb5aa48a910f6ef2c3`
+
+Message (270 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-doge
+Lock hash: 0x4bc158c10fca14a6cca6e5273ea5db0bb3d06ad0b3b508bb5aa48a910f6ef2c3
+Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+Issued at: 2026-11-05T12:00:00Z
+Nonce: n-doge
+```
+
+Out point tx hash P: `0x8411e47ff60f74930665baf4e1661f2ce96fc5433beaca09dbcf425da97190b0`
+
+Transaction hash: `0x55b606e6d199884215b75ebd906ee9f04362af2f26520a31d62a5a2db8e33c3e`
+
+Cell deps: the secp256k1 dep group `0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37:0` and the Omnilock code cell `0xec18bf0d857c981c3d1f4e17999b9b90c484b303378e94de1a57b0872f5d4602:0`.
+
+Expected:
+
+- the proof: accepted, 1,462,047 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31 (`ERROR_IDENTITY_PUBKEY_BLAKE160_HASH`)
+- bit 0 of witness byte 80 (in the s half of the signature) flipped: lock exit -31
+- `controls.wrongKey` (another Dogecoin key signed): lock exit -31
+- probe (a), the same transaction with an empty witness: lock exit 71; probe (b) is the other-message line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V8. Nostr lock
+
+File: `tests/vectors/nostr.json`. Nostr lock (CCC `NostrLock`, no proof of work). Random key made for the test, signed with an unmodified CCC SignerNostrPrivateKey (prepareTransaction, signOnlyTransaction). The witness lock is a signed Nostr event, as JSON, with the sighash in a `ckb_sighash_all` tag. Testnet, 2026-11-05.
+
+Lock:
+
+```json
+{
+  "codeHash": "0x6ae5ee0cb887b2df5a9a18137315b9bdc55be8d52637b2de0624092d5f0c91d5",
+  "hashType": "type",
+  "args": "0x0038acc98818377c58e8e189f484e09a4a896a5814"
+}
+```
+
+Lock hash: `0x3ac94bc0a8ef71ca2455f07dc04dfa5b835ea42a9dbef4c98a70db487b65efc6`
+
+Message (272 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-nostr
+Lock hash: 0x3ac94bc0a8ef71ca2455f07dc04dfa5b835ea42a9dbef4c98a70db487b65efc6
+Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+Issued at: 2026-11-05T12:00:00Z
+Nonce: n-nostr
+```
+
+Out point tx hash P: `0x3dfe2a707bc10ad2e9e1fc9703819b6a36c811f82829322e054f97ca7376953b`
+
+Transaction hash: `0x8e9e64c5fb4efee64483a9e9d67130631c619995cc0b5d0ea3caf7359e9140c8`
+
+Cell deps: the Nostr lock code cell `0xa2a434dcdbe280b9ed75bb7d6c7d68186a842456aba0fc506657dc5ed7c01d68:0`.
+
+Expected:
+
+- the proof: accepted, 4,169,370 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 11 (`SighashAllMismatched`)
+- bit 0 of witness byte 526 flipped (a hex digit of the signature's s half, `c` to `b`, so the event still parses): lock exit 18 (`ValidationFail`)
+- `controls.wrongKey` (another Nostr key signed): lock exit 26 (`PubkeyNotFound`, the event's author is not the lock's key)
 - probe (a), the same transaction with an empty witness: lock exit 4; probe (b) is the other-message line above
 - `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
