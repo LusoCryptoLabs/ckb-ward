@@ -8,6 +8,8 @@ The wallet signs a transaction that can never be committed. The verifier rebuild
 
 The full standard, with byte-exact templates, the rules a platform must follow, and test vectors, is in [docs/SPEC.md](docs/SPEC.md).
 
+Try it on testnet: [ward-demo.lusocryptolabs.com](https://ward-demo.lusocryptolabs.com) binds a lock from any wallet CCC connects and counts its Nervos DAO deposits in a test vote. Its source, a reference platform for the rules, is in [demo/](demo/).
+
 ## Why
 
 Voting platforms on CKB today accept one signature type. Metaforo, for example, binds only Neuron-style signatures (secp256k1 signed messages). A CKB lock is a program, so holders whose deposits sit under JoyID, a multisig, Omnilock or a smart-account lock have no way to link them. Checking each signature scheme separately does not scale: every new lock needs new verifier code and new wallet code.
