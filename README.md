@@ -68,10 +68,13 @@ const result = await verify(
 Verifying is the easy half. A platform that counts weight from bindings also needs the rules of section 9 of the spec: one active binding per lock, bindings frozen while a vote is open, weight read at one snapshot block from Nervos DAO deposits only, and a binding counted only while the cells its proof ran with were live at that block:
 
 ```ts
-import { depsLiveAt } from "ckb-ward";
+import { daoWeightAt, depsLiveAt } from "ckb-ward";
 const at = await depsLiveAt(rpcUrl, binding.cellDeps, snapshotBlock); // cellDeps as verify() returned them
 if (!at.live) skip(binding); // at.deps says which cell, and when it was created or spent
+const { weight } = await daoWeightAt(rpcUrl, binding.lock, snapshotBlock); // shannons in DAO deposits
 ```
+
+`daoWeightAt` counts only the Nervos DAO deposits under exactly that lock that were live at the snapshot block. A cell in phase 1 of a withdrawal keeps the DAO type but is not counted (it comes back in `withdrawing`), and a lock whose args merely start the same way weighs nothing. It throws rather than give a weight it could not read in full.
 
 Wallets can call `readProof(tx, lock)` (from `ckb-ward/wallet`) to recognise a proof request and show its domain next to the site's origin, instead of a transfer.
 
