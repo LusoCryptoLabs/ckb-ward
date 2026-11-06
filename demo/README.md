@@ -26,6 +26,8 @@ The lock runs under `ward-vm`, built from `vm/` in the image, with testnet's con
 
 The wallet list is CCC's, with the Cellula wallet added before the other wallets (CCC keeps its own Khie on top) through a `SignersController` subclass (`src/main.tsx`, `CellulaWalletSigner` from `cellula-sdk`), since CCC does not list it yet.
 
+A wallet can hold more than one address: MetaMask through CCC has two Omnilock addresses and the PW-lock address Portal Wallet used. The page lists them with the Nervos DAO deposit of each and starts with the one that holds the most, so a Portal Wallet depositor signs up with that address without looking for it.
+
 ## Run it
 
 ```sh
