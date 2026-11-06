@@ -1,0 +1,86 @@
+{
+  "name": "JoyID, sub key",
+  "about": "JoyID sub key: a second device added on 2026-11-06 to the testnet account of V2 (its passkey made in a phone browser), signed in the JoyID app on that phone through an unmodified CCC JoyId.CkbSigner, whose prepareTransaction adds the account's CoTA cell as a dep and the sub key's SMT unlock entry as the witness's output_type. Testnet.",
+  "lock": {
+    "codeHash": "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac",
+    "hashType": "type",
+    "args": "0x000140911fa94eaef8c1d0eca81b23e1972ecb0548dc"
+  },
+  "message": "cellula.id wants you to prove control of a CKB lock.\nAccount: ward-joyid-test\nLock hash: 0xd9d177037d0888e09330bf0dd18e98c534ea3479b4376911d0a5279ead21e0f8\nChain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606\nIssued at: 2026-11-06T11:11:17.769Z\nNonce: 01d560a2c2aa6280",
+  "tx": {
+    "version": "0x0",
+    "cellDeps": [
+      {
+        "outPoint": {
+          "txHash": "0x25bcc222f265419ebfb449f4849da33c1b03fa7cb7d8eea82ed0105336e20c4d",
+          "index": "0x0"
+        },
+        "depType": "code"
+      },
+      {
+        "outPoint": {
+          "txHash": "0x4a596d31dc35e88fb1591debbf680b04a44b4a434e3a94453c21ea8950ffb4d9",
+          "index": "0x0"
+        },
+        "depType": "code"
+      },
+      {
+        "outPoint": {
+          "txHash": "0x4a596d31dc35e88fb1591debbf680b04a44b4a434e3a94453c21ea8950ffb4d9",
+          "index": "0x1"
+        },
+        "depType": "code"
+      },
+      {
+        "outPoint": {
+          "txHash": "0xf2c9dbfe7438a8c622558da8fa912d36755271ea469d3a25cb8d3373d35c8638",
+          "index": "0x1"
+        },
+        "depType": "code"
+      },
+      {
+        "outPoint": {
+          "txHash": "0x95ecf9b41701b45d431657a67bbfa3f07ef7ceb53bf87097f3674e1a4a19ce62",
+          "index": "0x1"
+        },
+        "depType": "code"
+      },
+      {
+        "outPoint": {
+          "txHash": "0x8b3255491f3c4dcc1cfca33d5c6bcaec5409efe4bbda243900f9580c47e0242e",
+          "index": "0x1"
+        },
+        "depType": "code"
+      }
+    ],
+    "headerDeps": [],
+    "inputs": [
+      {
+        "previousOutput": {
+          "txHash": "0x868280233369ff95faeab971f3416b1cc99663d377b20c88fe1e7fcf2823777a",
+          "index": "0xffffffff"
+        },
+        "since": "0x0"
+      }
+    ],
+    "outputs": [
+      {
+        "capacity": "0x7aef40a00",
+        "lock": {
+          "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "hashType": "data",
+          "args": "0x"
+        }
+      }
+    ],
+    "outputsData": [
+      "0x63656c6c756c612e69642077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20776172642d6a6f7969642d746573740a4c6f636b20686173683a203078643964313737303337643038383865303933333062663064643138653938633533346561333437396234333736393131643061353237396561643231653066380a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30365431313a31313a31372e3736395a0a4e6f6e63653a2030316435363061326332616136323830"
+    ],
+    "witnesses": [
+      "0xfd01000010000000dc010000dc010000c8010000028ffe8c27c9aa6b260d9db0ccf43c9728a80a2e4be336583b9f5aea43f200b422ba3b2d99aa2408a52edb06a4a065745f03cd029978aefc5bc22f268b0bf8eedf1e0f84c41db70bfc70e1eec90807b39c42d88ef378e74a54ce4d9df77f2488de6ed21ac612dfc13ba5c89171cc121a2c1d85499de350232b24b10db48bff1e0f2b8b05e1f0303efb898fe4d6de601198c7a7b864abbe6a21c73b2e787e187c521d000000007b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224d6d59774e4759314f4749795a6d4a6b4e445179596d566c4d4751335954513359544d795a6a6b7a5a6a4e6b4f545a6d4e444e6a5a4459774e6a67344e6a55344d6a466a5a5467775a6a6b79593255314f4759334d41222c226f726967696e223a2268747470733a2f2f746573746e65742e6a6f7969642e646576222c2263726f73734f726967696e223a66616c73652c226f746865725f6b6579735f63616e5f62655f61646465645f68657265223a22646f206e6f7420636f6d7061726520636c69656e74446174614a534f4e20616761696e737420612074656d706c6174652e205365652068747470733a2f2f676f6f2e676c2f796162506578227d1d0000001d000000100000001400000016000000000000010001030000004c4f00"
+    ]
+  },
+  "signatureByte": 95,
+  "otherMessageExit": 12,
+  "signatureFlipExit": 11
+}

@@ -186,7 +186,6 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 
 ## 12. Not covered
 
-- **JoyID sub-keys.** Untested. A sub-key proof adds the CoTA cell as a dep, which the verifier reads like any other. One attempt signed with the main key instead.
 - **Locks with a time condition.** The template has since 0. Measured: an Omnilock in time-lock mode refuses it (exit -24), so such a lock cannot be proven with this template.
 - **Locks whose signature does not cover the transaction hash.** Probe (b) refuses a witness that opens another message; a lock that signs something else could still pass it.
 - **Locks that read header deps.** The template has none, so the result can differ from a real spend.
@@ -205,6 +204,7 @@ All on testnet, under the v1 rules (input at u64::MAX, both probes on): V5 to V8
 | secp256k1_blake160 | CCC private key signer | accepted | 1,645,417 | wrong key, exit -31 | V1 |
 | secp256k1_blake160, MAINNET (2026-11-05) | CCC private key signer, mainnet cell deps | accepted | 1,653,447 | wrong key -31; flipped signature bit -31; a testnet platform, message names another chain | V9 |
 | JoyID, main key | JoyID app (testnet.joyid.dev) | accepted | 6,905,201 | flipped signature bit, exit 11 | V2 |
+| JoyID, sub key (2026-11-06) | JoyID app on a second device, through CCC's JoyID signer | accepted | 6,957,775 | flipped signature bit 11; the sub key list from before the device was added 13; the CoTA cell that list lived in, refused as not live | V10 |
 | Cellula smart account, starter | software P-256 key, wallet's WebAuthn shape | accepted | 6,772,215 | wrong key, exit 26 | V3 |
 | Cellula smart account, guarded | software P-256 key | accepted | 6,755,721 | wrong key 26; no Config Cell 21; forged Config Cell refused by rule 1 | V4 |
 | Cellula smart account, guarded, with per-transaction caps | software P-256 keys, Config Cell fabricated in a local node stub | key with no cap accepted; keys capped at 100 and 1,000 CKB refused, exit 27 | about 6.8 million | key not in the Config Cell, exit 26 | test |
@@ -845,3 +845,46 @@ Expected, against mainnet (ckb-debugger, and `ward-vm` under mainnet's consensus
 - probe (a), the same transaction with an empty witness: lock exit -2
 - a platform pinned to testnet: refused before any chain read, message names another chain
 - `test_tx_pool_accept` on mainnet: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V10. JoyID, sub key
+
+File: `tests/vectors/joyid-subkey.json`. The testnet account of V2 with a second device added on 2026-11-06: its passkey was made in a phone browser, which made it a sub key, and the proof was signed in the JoyID app on that phone through an unmodified CCC `JoyId.CkbSigner`. Its `prepareTransaction` adds the account's CoTA cell as the first cell dep and puts the sub key's SMT unlock entry in the witness's `output_type`.
+
+Lock:
+
+```json
+{
+  "codeHash": "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac",
+  "hashType": "type",
+  "args": "0x000140911fa94eaef8c1d0eca81b23e1972ecb0548dc"
+}
+```
+
+Lock hash: `0xd9d177037d0888e09330bf0dd18e98c534ea3479b4376911d0a5279ead21e0f8`
+
+Message (289 bytes):
+
+```text
+cellula.id wants you to prove control of a CKB lock.
+Account: ward-joyid-test
+Lock hash: 0xd9d177037d0888e09330bf0dd18e98c534ea3479b4376911d0a5279ead21e0f8
+Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+Issued at: 2026-11-06T11:11:17.769Z
+Nonce: 01d560a2c2aa6280
+```
+
+Out point tx hash P: `0x868280233369ff95faeab971f3416b1cc99663d377b20c88fe1e7fcf2823777a`
+
+Transaction hash: `0xa911a4896a8b5be6650768320c64cf7499822dc2bcd399142581b0f743d95598`
+
+Cell deps: the account's CoTA cell `0x25bcc222f265419ebfb449f4849da33c1b03fa7cb7d8eea82ed0105336e20c4d:0` (33 bytes: a version byte and the root of the sub key list), then the five JoyID deps of V2.
+
+Expected (ckb-debugger and `ward-vm` agree on every line):
+
+- the proof: accepted, 6,957,775 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 12
+- bit 0 of witness byte 95 flipped (inside the signature): lock exit 11
+- the CoTA cell's data as it was before the device was added (`0x02` and 32 zero bytes, from the cell the device's registration spent, `0x5406dae922943df98f8ca5783bcf94468af044417cad4f900bf83d808a0d4862:1`): lock exit 13. A key that is not on the list cannot prove.
+- the proof listing that spent cell instead: refused before the lock runs, the cell dep is not live; and `depsLiveAt` counts it live until the block that added the device, not from it
+- probe (a), the same transaction with an empty witness: lock exit 4
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
