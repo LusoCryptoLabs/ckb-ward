@@ -1,0 +1,109 @@
+{
+ "name": "PW-lock (Portal Wallet)",
+ "about": "PW-lock with an Ethereum address, the lock Portal Wallet gave MetaMask users. Random key made for the test (no funds, never used again); CCC's SignerEvm prepares and places the signature (keccak256 sighash), and the wallet's personal_sign is done by ethers' Wallet.signMessage, the same algorithm. Testnet, 2026-11-06.",
+ "lock": {
+  "codeHash": "0x58c5f491aba6d61678b7cf7edf4910b1f5e00ec0cde2f42e0abb4fd9aff25a63",
+  "hashType": "type",
+  "args": "0xc004c0e0fec9205b402f19431fac7a04025fc6d5"
+ },
+ "message": "dao.example wants you to prove control of a CKB lock.\nAccount: user-pw\nLock hash: 0x9fc41db1f4ca40961fa7c1f97692eedc108b8857339240f151f863049a5a10c3\nChain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606\nIssued at: 2026-11-06T12:00:00Z\nNonce: n-pw",
+ "tx": {
+  "version": "0x0",
+  "cellDeps": [
+   {
+    "outPoint": {
+     "txHash": "0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37",
+     "index": "0x0"
+    },
+    "depType": "depGroup"
+   },
+   {
+    "outPoint": {
+     "txHash": "0x57a62003daeab9d54aa29b944fc3b451213a5ebdf2e232216a3cfed0dde61b38",
+     "index": "0x0"
+    },
+    "depType": "code"
+   }
+  ],
+  "headerDeps": [],
+  "inputs": [
+   {
+    "previousOutput": {
+     "txHash": "0x3cda4407f57ca2e6e7909a3640213069c82ebb8a898eeb26e83c86b1b7d0be38",
+     "index": "0xffffffff"
+    },
+    "since": "0x0"
+   }
+  ],
+  "outputs": [
+   {
+    "capacity": "0x725dcd300",
+    "lock": {
+     "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "hashType": "data",
+     "args": "0x"
+    }
+   }
+  ],
+  "outputsData": [
+   "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d70770a4c6f636b20686173683a203078396663343164623166346361343039363166613763316639373639326565646331303862383835373333393234306631353166383633303439613561313063330a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30365431323a30303a30305a0a4e6f6e63653a206e2d7077"
+  ],
+  "witnesses": [
+   "0x55000000100000005500000055000000410000008a3bfff423f7ebdca20fd0e17648db2bf788ce52b423910cb9be073bb4533dcb5b4c2455aff37fdd62ab3f6f5437cda2ec4ba07c28714af6d6519cf6ee6ac0de00"
+  ]
+ },
+ "signatureByte": 30,
+ "otherMessageExit": -31,
+ "signatureFlipExit": -11,
+ "controls": {
+  "wrongKey": {
+   "about": "A second random Ethereum key signs the same template for the first key's lock.",
+   "exit": -31,
+   "tx": {
+    "version": "0x0",
+    "cellDeps": [
+     {
+      "outPoint": {
+       "txHash": "0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37",
+       "index": "0x0"
+      },
+      "depType": "depGroup"
+     },
+     {
+      "outPoint": {
+       "txHash": "0x57a62003daeab9d54aa29b944fc3b451213a5ebdf2e232216a3cfed0dde61b38",
+       "index": "0x0"
+      },
+      "depType": "code"
+     }
+    ],
+    "headerDeps": [],
+    "inputs": [
+     {
+      "previousOutput": {
+       "txHash": "0x3cda4407f57ca2e6e7909a3640213069c82ebb8a898eeb26e83c86b1b7d0be38",
+       "index": "0xffffffff"
+      },
+      "since": "0x0"
+     }
+    ],
+    "outputs": [
+     {
+      "capacity": "0x725dcd300",
+      "lock": {
+       "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+       "hashType": "data",
+       "args": "0x"
+      }
+     }
+    ],
+    "outputsData": [
+     "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d70770a4c6f636b20686173683a203078396663343164623166346361343039363166613763316639373639326565646331303862383835373333393234306631353166383633303439613561313063330a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30365431323a30303a30305a0a4e6f6e63653a206e2d7077"
+    ],
+    "witnesses": [
+     "0x5500000010000000550000005500000041000000c0f7c8d606e77e005403699791507de135a80322a87b1a7eaf0329b759c25f5a5605553e39f08642cec2f05f956893ad8ab8d6c563bae03bfe5a210df2f1c81f00"
+    ]
+   }
+  }
+ }
+}

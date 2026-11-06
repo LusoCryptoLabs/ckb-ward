@@ -127,10 +127,10 @@ A proof is untrusted input that makes the verifier read the chain and run code. 
 | an out point listed twice | refused | The node refuses it (`DuplicateCellDeps`). Without it, the first review made one proof list a dep group of 1,000 members 15 times: 15,018 cell reads. |
 | cells listed by dep groups | 32 in total, counted from the groups' data before any member is read; each member read once | The secp256k1 dep group, the largest measured, lists 2. The node itself allows 2,048 expanded deps (measured by the review: 2,048 accepted, 2,049 refused with `OverMaxDepExpansionLimit`), but only after reading every member. |
 | transaction size | 597,000 bytes as serialized in a block (the transaction's bytes plus a 4 byte offset) | The consensus block limit. Measured on testnet: at 597,000 the node goes past that check, at 597,001 it refuses with `ExceededMaximumBlockBytes`. The node's pool refuses above 512,000 (measured), a node setting. |
-| witness | 65,536 bytes; a verifier may raise it for a lock with larger signatures | The largest measured is 592 (Nostr lock, a signed event as JSON). It leaves room for post-quantum signatures: SLH-DSA 256f is 49,856 bytes by its parameter set (not measured here). |
+| witness | 65,536 bytes; a verifier may raise it for a lock with larger signatures | The largest measured is 7,913 (the quantum-resistant lock with one SLH-DSA-SHA2-128s key, V15 and V17). It leaves room for larger post-quantum parameter sets: SLH-DSA 256f is 49,856 bytes by its parameter set (not measured here). |
 | message | 1,024 bytes | Section 3. |
 | each chain read | a timeout, 10 seconds by default | A slow or stalled node would hold the verifier. |
-| each lock run | a cycle limit, 70,000,000 here | The largest proof measured took 6,905,201 cycles (JoyID, real app). |
+| each lock run | a cycle limit, 70,000,000 here | The largest proof measured took 12,003,353 cycles (the quantum-resistant lock on mainnet, V17). |
 | request body | platforms cap it; 256 KiB is enough | A proof at every limit above is under 140 KB as JSON. |
 
 ## 8. Replay and expiry
@@ -193,12 +193,12 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 - **Locks that read the input's capacity.** They see u64::MAX. A lock that adds it to another amount could overflow and refuse an honest proof.
 - **Locks that need more than one input or more than one witness**, such as an owner lock that needs the owner's cell as a second input.
 - **Type scripts.** Never run. The proof is about the lock only.
-- **Mainnet.** V9 (secp256k1, 2026-11-05) and V11 (JoyID, signed 2026-11-04) are replayed by the tests against mainnet's cell deps, under ckb-debugger and under `ward-vm` with mainnet's consensus. The JoyID app on mainnet only accepts a requesting page served over https.
+- **Mainnet.** V9 (secp256k1, 2026-11-05), V11 (JoyID, signed 2026-11-04), V16 (PW-lock) and V17 (the quantum-resistant lock, both 2026-11-06) are replayed by the tests against mainnet's cell deps, under ckb-debugger and under `ward-vm` with mainnet's consensus. The JoyID app on mainnet only accepts a requesting page served over https.
 - **A production VM in production.** `ward-vm` (section 11) runs the node's script code under the chain's consensus, and every vector agrees with ckb-debugger under it. Running it for a platform, and moving its pin with node upgrades, is the platform's.
 
 ## 13. Locks tested
 
-All on testnet, under the v1 rules (input at u64::MAX, both probes on): V5 to V8 and the Omnilock administrator rows on 2026-11-05, V12 and V13 on 2026-11-06, the rest on 2026-11-04. "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
+All on testnet unless the row says MAINNET, under the v1 rules (input at u64::MAX, both probes on): V5 to V8 and the Omnilock administrator rows on 2026-11-05, V12 to V17 on 2026-11-06, the rest on 2026-11-04. "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
 
 | Lock | Signer | Result | Cycles | Controls, refused | In repo |
 | --- | --- | --- | --- | --- | --- |
@@ -216,12 +216,18 @@ All on testnet, under the v1 rules (input at u64::MAX, both probes on): V5 to V8
 | Omnilock, Dogecoin mode | CCC Doge signer | accepted | 1,462,047 | another key -31; flipped signature bit -31 | V7 |
 | Omnilock, Ethereum mode (2026-11-06), the lock CCC gives MetaMask | CCC EVM signer, the wallet's personal_sign done in software | accepted | 1,476,174 | another key -31; flipped signature bit -31 | V12 |
 | Omnilock, Bitcoin mode (2026-11-06), the lock CCC gives UniSat and OKX | CCC BTC signer, the wallet's message signing done in software | accepted | 1,454,872 | another key -31; flipped signature bit -31 | V13 |
+| PW-lock (2026-11-06), the lock Portal Wallet gave MetaMask users | CCC EVM signer (keccak256 sighash), the wallet's personal_sign done in software | accepted | 1,708,567 | another key -31; flipped signature bit -11 | V14 |
+| PW-lock, MAINNET (2026-11-06) | as above, mainnet cell deps | accepted | 1,693,674 | another key -31; flipped signature bit -11 | V16 |
+| Quantum-resistant lock (2026-11-06), Quantum Purse's deployment, one SLH-DSA-SHA2-128s key | software key, signed over the input at u64::MAX | accepted | 11,831,311 | another key 105; flipped signature bit 107 | V15 |
+| Quantum-resistant lock, MAINNET (2026-11-06) | as above, mainnet cell deps | accepted | 12,003,353 | another key 105; flipped signature bit 107 | V17 |
 | Omnilock, administrator mode, CCC's deployment | software keys, admin list cell fabricated in a local node stub | the lock accepts the admin's key (exit 0) and the owner's (exit 0); the verifier refuses both, rule 6 | about 1.5 million | not on the list 59; not on the list, naming the admin -31; no list cell 1 | test |
 | Omnilock, administrator mode, 2022 deployment | as above | the lock accepts the admin's key (exit 0); the owner's stops the VM; the verifier refuses both, rule 6 | about 1.5 million | as above | test |
 | Nostr lock | CCC Nostr signer | accepted | 4,169,370 | another key 26; flipped signature bit 18 | V8 |
 | JoyID, main key | software P-256 key in JoyID's format | accepted | 6,729,097 | another key, exit 6 | no |
 | always-success, assembled | none | refused by probe (a) | | accepted with the probes off | test |
 | 4 byte password, assembled | the password | refused by probe (b) | | accepted with the probes off; empty witness exit 2 | test |
+
+PW-lock and the quantum-resistant lock are most of the Nervos DAO depositors that a secp256k1 binding cannot count (926 and 5 of 1,132 at mainnet block 20,942,448). For PW-lock, CCC's `SignerEvm` lists an EVM wallet's PW-lock address next to its Omnilock one, so a site built on CCC can ask MetaMask for either. The quantum-resistant lock's message covers the input cells, so its wallet has to sign over the input as the verifier resolves it (capacity u64::MAX), a cell that is not on chain. Quantum Purse was not tested.
 
 ## 14. Rejected alternatives
 
@@ -237,7 +243,7 @@ The v0 draft had a second template for wallets that look inputs up on chain: a l
 
 ## Appendix: test vectors
 
-Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points (V9 and V11: mainnet), and every vector is valid only while they stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04 (V1 to V4) and 2026-11-05 (V5 to V8). V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4); the signed bytes are the v0 ones.
+Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points (V9, V11, V16 and V17: mainnet), and every vector is valid only while they stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04 (V1 to V4), 2026-11-05 (V5 to V8) and 2026-11-06 (V12 to V17, mainnet for V16 and V17). V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4); the signed bytes are the v0 ones.
 
 ### V1. secp256k1
 
@@ -1016,4 +1022,172 @@ Expected:
 - bit 0 of witness byte 80 (in the s half of the signature) flipped: lock exit -31
 - `controls.wrongKey` (another Bitcoin key signed for this lock): lock exit -31
 - probe (a), the same transaction with an empty witness: lock exit 71; probe (b) is the other-message line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V14. PW-lock (Portal Wallet)
+
+File: `tests/vectors/pw-lock.json`. PW-lock with an Ethereum address as args, the lock Portal Wallet gave MetaMask users. Random key made for the test. CCC's `SignerEvm` prepares the transaction and places the signature: it hashes the transaction with keccak256, and the wallet's part, `personal_sign` of those 32 bytes, is done by ethers' `Wallet.signMessage`, the same algorithm. The MetaMask app itself was not driven. 2026-11-06.
+
+Lock:
+
+```json
+{
+  "codeHash": "0x58c5f491aba6d61678b7cf7edf4910b1f5e00ec0cde2f42e0abb4fd9aff25a63",
+  "hashType": "type",
+  "args": "0xc004c0e0fec9205b402f19431fac7a04025fc6d5"
+}
+```
+
+Lock hash: `0x9fc41db1f4ca40961fa7c1f97692eedc108b8857339240f151f863049a5a10c3`
+
+Message (266 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-pw
+Lock hash: 0x9fc41db1f4ca40961fa7c1f97692eedc108b8857339240f151f863049a5a10c3
+Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+Issued at: 2026-11-06T12:00:00Z
+Nonce: n-pw
+```
+
+Out point tx hash P: `0x3cda4407f57ca2e6e7909a3640213069c82ebb8a898eeb26e83c86b1b7d0be38`
+
+Transaction hash: `0xa684c5c39279c89f585ad7915fb10f725feb5c5fb7cdff7be13937c6eb5d09c9`
+
+Cell deps: the secp256k1 dep group `0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37:0` and the PW-lock code cell `0x57a62003daeab9d54aa29b944fc3b451213a5ebdf2e232216a3cfed0dde61b38:0`, as CCC's testnet known scripts name them.
+
+Expected:
+
+- the proof: accepted, 1,708,567 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31
+- bit 0 of witness byte 30 (in the signature) flipped: lock exit -11
+- `controls.wrongKey` (another key signed for this lock): lock exit -31
+- probe (a), the same transaction with an empty witness: lock exit -44; probe (b) is the other-message line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V15. Quantum-resistant lock (Quantum Purse)
+
+File: `tests/vectors/quantum-lock.json`. The quantum-resistant lock (nervosnetwork/quantum-resistant-lock-script) with one SLH-DSA-SHA2-128s key, at the deployment Quantum Purse and the Cellula SDK both name. Random key made for the test. This lock's message covers the input cells, so the signature is made over the template's input as the verifier resolves it (capacity u64::MAX, no type, no data), with the Cellula SDK's `pqTxMessageAll` and `@noble/post-quantum`. No wallet app was driven. 2026-11-06.
+
+Lock:
+
+```json
+{
+  "codeHash": "0x147ecbb5c5127d982ee1362d2c2bb4267803da2eb006d150e88af6caaa0a7eaf",
+  "hashType": "data1",
+  "args": "0x02af6a5fc237287b5588ec19452db8f7fab084c192e7b4a31cc4a855f5ffef59"
+}
+```
+
+Lock hash: `0x5e1499c68c0d351ce3c59cc52da9a2a43aa2d3f9f08bd0b006c50e9104e95ba3`
+
+Message (266 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-pq
+Lock hash: 0x5e1499c68c0d351ce3c59cc52da9a2a43aa2d3f9f08bd0b006c50e9104e95ba3
+Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+Issued at: 2026-11-06T12:00:00Z
+Nonce: n-pq
+```
+
+Out point tx hash P: `0x5892f325570e2fd763e11fe6eb8a6021432f2ad0572b158fe56f7eba7fabf03a`
+
+Transaction hash: `0xa39483866b8d58040858273b6175e2a5088fd1d66ca3065882aa14742fcd8c7a`
+
+Cell deps: the lock's code cell `0x631d9a6049fb1fc3790e89d9daf35abe535b5e754cd8c3404319319710f0b106:0`, referred to by data hash (`data1`), as Quantum Purse's testnet build names it.
+
+Expected:
+
+- the proof: accepted, 11,831,311 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 107
+- bit 0 of witness byte 100 (in the signature) flipped: lock exit 107
+- `controls.wrongKey` (another key signed for this lock): lock exit 105
+- probe (a), the same transaction with an empty witness: lock exit 106; probe (b) is the other-message line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V16. PW-lock, mainnet
+
+File: `tests/vectors/mainnet-pw-lock.json`. PW-lock with an Ethereum address as args, the lock Portal Wallet gave MetaMask users. Random key made for the test. CCC's `SignerEvm` prepares the transaction and places the signature: it hashes the transaction with keccak256, and the wallet's part, `personal_sign` of those 32 bytes, is done by ethers' `Wallet.signMessage`, the same algorithm. The MetaMask app itself was not driven. Mainnet cell deps, read only, nothing sent. 2026-11-06.
+
+Lock:
+
+```json
+{
+  "codeHash": "0xbf43c3602455798c1a61a596e0d95278864c552fafe231c063b3fabf97a8febc",
+  "hashType": "type",
+  "args": "0xc5f0d30c1be64a373a7b0badbcca85ce4c013b50"
+}
+```
+
+Lock hash: `0xa0f4a16186d9ed9d63e837dd48c17e02706232dc48c012760168591e5f16c1fe`
+
+Message (266 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-pw
+Lock hash: 0xa0f4a16186d9ed9d63e837dd48c17e02706232dc48c012760168591e5f16c1fe
+Chain: 0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5
+Issued at: 2026-11-06T12:00:00Z
+Nonce: n-pw
+```
+
+Out point tx hash P: `0x37661cd16744f2c9073fbc111581ce6e94e2dae67b81128e3e633239e1857cd4`
+
+Transaction hash: `0x0062b4c1d201d8fe3a8be24cf06704b9616ae4b90703683d67d79dfe8cde54fd`
+
+Cell deps: the secp256k1 dep group `0x71a7ba8fc96349fea0ed3a5c47992e3b4084b031a42264a018e0072e8172e46c:0` and the PW-lock code cell `0x1d60cb8f4666e039f418ea94730b1a8c5aa0bf2f7781474406387462924d15d4:0`, as CCC's mainnet known scripts name them.
+
+Expected:
+
+- the proof: accepted, 1,693,674 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31
+- bit 0 of witness byte 30 (in the signature) flipped: lock exit -11
+- `controls.wrongKey` (another key signed for this lock): lock exit -31
+- probe (a), the same transaction with an empty witness: lock exit -44; probe (b) is the other-message line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V17. Quantum-resistant lock, mainnet
+
+File: `tests/vectors/mainnet-quantum-lock.json`. The quantum-resistant lock (nervosnetwork/quantum-resistant-lock-script) with one SLH-DSA-SHA2-128s key, at the deployment Quantum Purse and the Cellula SDK both name. Random key made for the test. This lock's message covers the input cells, so the signature is made over the template's input as the verifier resolves it (capacity u64::MAX, no type, no data), with the Cellula SDK's `pqTxMessageAll` and `@noble/post-quantum`. No wallet app was driven. Mainnet cell deps, read only, nothing sent. 2026-11-06.
+
+Lock:
+
+```json
+{
+  "codeHash": "0x302d35982f865ebcbedb9a9360e40530ed32adb8e10b42fbbe70d8312ff7cedf",
+  "hashType": "type",
+  "args": "0x9182cdcdbba4cda67e27ea6b811ddd74a1226f4c1141a464369180cc0205fc34"
+}
+```
+
+Lock hash: `0xc376267e210555bc803fd2e30375a2b50b601853d3dd9c89fbf5605be6abdab4`
+
+Message (266 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-pq
+Lock hash: 0xc376267e210555bc803fd2e30375a2b50b601853d3dd9c89fbf5605be6abdab4
+Chain: 0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5
+Issued at: 2026-11-06T12:00:00Z
+Nonce: n-pq
+```
+
+Out point tx hash P: `0xbb2b7a17b8eb087eabb7c47bad48e8614ee6bef0f368eed785ac3a5a4bfb02ef`
+
+Transaction hash: `0x37a883e5a4ce051ff0b9d522c7876de3a88f05e8a6041ffef4f0aa2f681af3b5`
+
+Cell deps: the lock's code cell `0x4598d00df2f3dc8bc40eee38689a539c94f6cc3720b7a2a6746736daa60f500a:0`; the lock refers to it by type id (`0x302d3598…`), as Quantum Purse's mainnet build names it. On testnet the code is an older build (V15), so this vector is the one that runs the code mainnet depositors use.
+
+Expected:
+
+- the proof: accepted, 12,003,353 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 107
+- bit 0 of witness byte 100 (in the signature) flipped: lock exit 107
+- `controls.wrongKey` (another key signed for this lock): lock exit 105
+- probe (a), the same transaction with an empty witness: lock exit 106; probe (b) is the other-message line above
 - `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
