@@ -70,4 +70,8 @@ input {
 .note { padding: 10px 14px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); }
 .note.ok, .ok { color: var(--ok); }
 .note.bad { color: var(--bad); }
-footer { margin-top: 36px; font-size: 0.85rem; color: var(--muted); }
+
+.how { margin-top: 32px; border-top: 1px solid var(--line); padding-top: 14px; font-size: 0.9rem; color: var(--muted); }
+.how summary { cursor: pointer; font-weight: 600; color: var(--fg); padding: 6px 0; }
+.how p { margin: 10px 0; }
+.need { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 0.92rem; }
