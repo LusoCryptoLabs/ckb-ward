@@ -69,7 +69,7 @@ async function currentPoll() {
   if (!p.voting) return undefined;
   const row = db.prepare("SELECT * FROM polls WHERE id = ?").get(p.id) as any;
   if (row) return row;
-  const block = await tip();
+  const block = await retry(tip);
   db.prepare("INSERT OR IGNORE INTO polls (id, snapshot_block, opened_at) VALUES (?, ?, ?)").run(p.id, Number(block), new Date().toISOString());
   return db.prepare("SELECT * FROM polls WHERE id = ?").get(p.id) as any;
 }
@@ -87,6 +87,20 @@ function tally(pollId: number) {
   };
 }
 
+const weighed = new Map<string, { live: boolean; weight: bigint; deposits: number; withdrawing: number }>();
+
+/** A chain read that a slow moment of the public node should not fail: three tries, a pause between. */
+async function retry<T>(read: () => Promise<T>, tries = 3): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await read();
+    } catch (e) {
+      if (i >= tries) throw e;
+      await new Promise((r) => setTimeout(r, 1000 * i));
+    }
+  }
+}
+
 /** Rule 8: what each of an account's locks weighs in a poll, and why a lock does not count. */
 async function weighAccount(account: string, poll: { snapshot_block: number; opened_at: string }) {
   const bindings = db.prepare("SELECT * FROM bindings WHERE account = ?").all(account) as any[];
@@ -97,13 +111,26 @@ async function weighAccount(account: string, poll: { snapshot_block: number; ope
     const item: { lockHash: string; weight: string; counted: boolean; reason: string } = { lockHash: b.lock_hash, weight: "0", counted: false, reason: "" };
     if (BigInt(b.bound_block) >= snapshot) item.reason = "bound at or after the snapshot block";
     else if (b.moved_from && Date.parse(poll.opened_at) - Date.parse(b.bound_at) < COOLDOWN_MS) item.reason = `moved from ${b.moved_from}, still in its cooldown`;
-    else if (!(await depsLiveAt(RPC_URL, JSON.parse(b.cell_deps), snapshot)).live) item.reason = "a cell its proof ran with was not live at the snapshot; prove again";
     else {
-      const w = await daoWeightAt(RPC_URL, JSON.parse(b.lock), snapshot);
-      item.weight = w.weight.toString();
-      item.counted = true;
-      item.reason = `${w.deposits.length} deposit(s) live at the snapshot${w.withdrawing.length ? `, ${w.withdrawing.length} withdrawing cell(s) not counted` : ""}`;
-      total += w.weight;
+      // What a lock weighs at a snapshot does not change: read once, kept for the vote.
+      const key = `${poll.snapshot_block} ${b.lock_hash} ${b.cell_deps}`;
+      let found = weighed.get(key);
+      if (!found) {
+        found = await retry(async () => {
+          if (!(await depsLiveAt(RPC_URL, JSON.parse(b.cell_deps), snapshot)).live) return { live: false, weight: 0n, deposits: 0, withdrawing: 0 };
+          const w = await daoWeightAt(RPC_URL, JSON.parse(b.lock), snapshot);
+          return { live: true, weight: w.weight, deposits: w.deposits.length, withdrawing: w.withdrawing.length };
+        });
+        if (weighed.size > 10_000) weighed.clear();
+        weighed.set(key, found);
+      }
+      if (!found.live) item.reason = "a cell its proof ran with was not live at the snapshot; prove again";
+      else {
+        item.weight = found.weight.toString();
+        item.counted = true;
+        item.reason = `${found.deposits} deposit(s) live at the snapshot${found.withdrawing ? `, ${found.withdrawing} withdrawing cell(s) not counted` : ""}`;
+        total += found.weight;
+      }
     }
     locks.push(item);
   }
@@ -319,7 +346,10 @@ createServer(async (req, res) => {
     await route(req, res);
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;
-    if (status === 500) console.error(e);
-    if (!res.headersSent) send(res, status, { ok: false, reason: status === 500 ? "the server could not answer; try again" : (e as Error).message });
+    // A read of the public testnet node that timed out or failed: say so, and that a retry helps.
+    const node = !(e instanceof HttpError) && /timeout|aborted|fetch failed|get_|ECONN|ETIMEDOUT/i.test(`${(e as Error)?.name} ${(e as Error)?.message}`);
+    const code = node ? 503 : status;
+    if (code >= 500) console.error(new Date().toISOString(), req.method, req.url, code, e);
+    if (!res.headersSent) send(res, code, { ok: false, reason: code === 503 ? "the testnet node did not answer in time; try again" : status === 500 ? "the server could not answer; try again" : (e as Error).message });
   }
 }).listen(PORT, () => console.log(`[ward-demo] ${DOMAIN} on :${PORT}, cycle ${CYCLE_MS / 60_000} min, bind ${BIND_MS / 60_000} min`));
