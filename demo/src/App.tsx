@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ccc } from "@ckb-ccc/connector-react";
 
 type Totals = Record<string, { weight: string; accounts: number }>;
@@ -19,6 +19,9 @@ type State = {
   me: { account: string; myVote: string | null } | null;
 };
 type Binding = { lock_hash: string; account: string; bound_at: string; bound_block: number; moved_from: string | null };
+type Weight = { block: string; weight: string; deposits: number; withdrawing: number };
+/** One address of the connected wallet, with its Nervos DAO deposit once read. */
+type Choice = { script: ccc.Script; address: string; weight: Weight | null };
 
 const REPO = "https://github.com/LusoCryptoLabs/ckb-ward";
 
@@ -46,7 +49,7 @@ function lockKind(lock: ccc.Script): string {
   const code = lock.codeHash;
   if (code === "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb") {
     const flag = lock.args.slice(2, 4);
-    const mode = { "00": "CKB key", "01": "Ethereum", "12": "Ethereum", "04": "Bitcoin", "05": "Dogecoin", "06": "multisig" }[flag];
+    const mode = { "00": "CKB key", "01": "older Ethereum", "12": "Ethereum", "04": "Bitcoin", "05": "Dogecoin", "06": "multisig" }[flag];
     return `Omnilock${mode ? `, ${mode} mode` : ""}`;
   }
   const known: Record<string, string> = {
@@ -55,6 +58,7 @@ function lockKind(lock: ccc.Script): string {
     "0x3419a1c09eb2567f6552ee7a8ecffd64155cffe0f1796e6e61ec088d740c1356": "anyone-can-pay",
     "0x5c5069eb0857efc65e1bca0c07df34c31663b3622fd3876c876320fc9634e2a8": "multisig",
     "0x8f73d5d875b70c248c281052c9f67e2d7a2dbbee47a1ae71e68f44fed47b436e": "Cellula smart account",
+    "0x58c5f491aba6d61678b7cf7edf4910b1f5e00ec0cde2f42e0abb4fd9aff25a63": "Portal Wallet",
   };
   return known[code] ?? `lock ${short(code)}`;
 }
@@ -97,7 +101,10 @@ export function App() {
   const [skew, setSkew] = useState(0);
   const [lock, setLock] = useState<ccc.Script | null>(null);
   const [address, setAddress] = useState("");
-  const [weight, setWeight] = useState<{ block: string; weight: string; deposits: number; withdrawing: number } | null>(null);
+  const [weight, setWeight] = useState<Weight | null>(null);
+  const [choices, setChoices] = useState<Choice[]>([]);
+  const chosenByHand = useRef(false);
+  const lockHashRef = useRef("");
   const [account, setAccount] = useState("");
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
@@ -124,23 +131,48 @@ export function App() {
     return () => (clearInterval(a), clearInterval(b));
   }, [refresh]);
 
+  const choose = useCallback((c: Choice) => {
+    lockHashRef.current = c.script.hash();
+    setLock(c.script);
+    setAddress(c.address);
+    setWeight(c.weight);
+    setAccount((a) => a || `user-${c.script.args.slice(-6)}`);
+  }, []);
+
+  // A wallet can hold more than one address: MetaMask through CCC has an Omnilock address and the
+  // PW-lock address Portal Wallet used. List them all, read each one's deposit, and start with the
+  // one that holds the most, or the wallet's own pick when none holds any.
   useEffect(() => {
     setLock(null);
     setWeight(null);
     setAddress("");
+    setChoices([]);
+    chosenByHand.current = false;
     if (!signer) return;
+    let gone = false;
     (async () => {
-      const obj = await signer.getRecommendedAddressObj();
-      setLock(obj.script);
-      setAddress(obj.toString());
-      setAccount((a) => a || `user-${obj.script.args.slice(-6)}`);
-      try {
-        setWeight(await api("/api/weight", { lock: obj.script }));
-      } catch {
-        /* shown as unknown */
-      }
+      const first = await signer.getRecommendedAddressObj();
+      const all = await signer.getAddressObjs().catch(() => [first]);
+      const seen = new Set<string>();
+      const list: Choice[] = [first, ...all]
+        .filter((o) => !seen.has(o.script.hash()) && !!seen.add(o.script.hash()))
+        .slice(0, 4)
+        .map((o) => ({ script: o.script, address: o.toString(), weight: null }));
+      if (gone) return;
+      setChoices(list);
+      choose(list[0]);
+      const weights = await Promise.all(list.map((c) => api<Weight>("/api/weight", { lock: c.script }).catch(() => null)));
+      if (gone) return;
+      const read = list.map((c, i) => ({ ...c, weight: weights[i] }));
+      setChoices(read);
+      const most = read.reduce((m, c, i) => (BigInt(c.weight?.weight ?? 0) > BigInt(read[m].weight?.weight ?? 0) ? i : m), 0);
+      if (!chosenByHand.current) choose(read[most]);
+      else setWeight((w) => read.find((c) => c.script.hash() === lockHashRef.current)?.weight ?? w);
     })();
-  }, [signer]);
+    return () => {
+      gone = true;
+    };
+  }, [signer, choose]);
 
   const serverNow = now + skew;
   const phaseLeft = state ? (state.phase === "bind" ? state.voteOpensAt : state.closesAt) - serverNow : 0;
@@ -247,6 +279,32 @@ export function App() {
               In the Nervos DAO: {weight ? ckb(weight.weight) : "reading…"}
               {weight?.withdrawing ? " (a withdrawal in progress does not count)" : ""}
             </p>
+            {choices.length > 1 && (
+              <fieldset className="pick">
+                <legend className="small">This wallet has {choices.length} addresses. Sign up with the one that holds your deposit:</legend>
+                {choices.map((c) => (
+                  <label key={c.script.hash()}>
+                    <input
+                      type="radio"
+                      name="address"
+                      checked={lock?.hash() === c.script.hash()}
+                      disabled={!!busy}
+                      onChange={() => {
+                        chosenByHand.current = true;
+                        choose(c);
+                      }}
+                    />
+                    <span>
+                      {lockKind(c.script)}
+                      <br />
+                      <span className="mono">{short(c.address)}</span>
+                      <br />
+                      {c.weight ? `${ckb(c.weight.weight)} in the Nervos DAO` : "reading…"}
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            )}
             {lockBound && <p className="ok">Signed up as {lockBound.account}.</p>}
             <button className="link" onClick={disconnect}>
               Use another wallet
@@ -256,6 +314,7 @@ export function App() {
           <button onClick={open}>Connect a wallet</button>
         )}
         <p className="small">Works with Cellula, JoyID, MetaMask, UniSat, OKX, UTXO Global and more. Your wallet connects on the CKB test network.</p>
+        <p className="small">Used Portal Wallet? Connect MetaMask with the same account and choose the Portal Wallet address.</p>
       </section>
 
       <section>

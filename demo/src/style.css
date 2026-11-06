@@ -63,6 +63,11 @@ input {
   border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg);
 }
 .small { font-size: 0.88rem; color: var(--muted); }
+.pick { border: 0; padding: 0; margin: 8px 0 4px; min-width: 0; }
+.pick legend { padding: 0; margin-bottom: 4px; }
+.pick label { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 8px 0; color: var(--fg); border-top: 1px solid var(--line); cursor: pointer; }
+.pick input { width: auto; flex: none; margin: 3px 0 0; padding: 0; }
+.pick span { min-width: 0; overflow-wrap: anywhere; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
 .row { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .question { font-weight: 600; }
