@@ -53,6 +53,7 @@ function lockKind(lock: ccc.Script): string {
     "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac": "JoyID",
     "0x3419a1c09eb2567f6552ee7a8ecffd64155cffe0f1796e6e61ec088d740c1356": "anyone-can-pay",
     "0x5c5069eb0857efc65e1bca0c07df34c31663b3622fd3876c876320fc9634e2a8": "multisig",
+    "0x8f73d5d875b70c248c281052c9f67e2d7a2dbbee47a1ae71e68f44fed47b436e": "Cellula smart account",
   };
   return known[code] ?? `lock ${short(code)}`;
 }
@@ -160,6 +161,8 @@ export function App() {
 
   const poll = state?.phase === "vote" ? state.poll : state?.last;
   const voting = state?.phase === "vote";
+  /** Too close to the vote to sign and be checked before binding freezes. */
+  const closing = !voting && phaseLeft < 45_000;
   const lockBound = useMemo(() => (lock ? all.find((b) => b.lock_hash === lock.hash()) : undefined), [all, lock]);
 
   return (
@@ -211,7 +214,7 @@ export function App() {
         ) : (
           <button onClick={open}>Connect a wallet</button>
         )}
-        <p className="small">JoyID, MetaMask, UniSat, OKX, UTXO Global and the other wallets CCC connects, on testnet. With no deposit, your vote counts with weight 0.</p>
+        <p className="small">Cellula, JoyID, MetaMask, UniSat, OKX, UTXO Global and the other wallets CCC connects, on testnet. With no deposit, your vote counts with weight 0.</p>
       </section>
 
       <section>
@@ -220,10 +223,11 @@ export function App() {
           Account name on this demo
           <input value={account} onChange={(e) => setAccount(e.target.value.trim())} maxLength={64} placeholder="your name here" />
         </label>
-        <button disabled={!signer || !lock || !!busy || voting || !account} onClick={bind}>
+        <button disabled={!signer || !lock || !!busy || voting || closing || !account} onClick={bind}>
           Prove and bind
         </button>
         {voting && <p className="small">Binding reopens when the vote closes.</p>}
+        {closing && <p className="small">The vote opens in {clock(phaseLeft)}, too soon to sign and be checked. Binding reopens when it closes.</p>}
         {mine.account && (
           <div className="card">
             <p>
