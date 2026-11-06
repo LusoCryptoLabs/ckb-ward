@@ -218,6 +218,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       voteOpensAt: p.voteOpensAt,
       closesAt: p.closesAt,
       cooldownMinutes: COOLDOWN_MS / 60_000,
+      cycleMinutes: CYCLE_MS / 60_000,
       question: QUESTION,
       options: OPTIONS,
       poll: poll ? { id: poll.id, snapshotBlock: poll.snapshot_block, ...tally(poll.id) } : null,

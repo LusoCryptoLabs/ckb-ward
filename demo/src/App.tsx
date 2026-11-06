@@ -11,6 +11,7 @@ type State = {
   voteOpensAt: number;
   closesAt: number;
   cooldownMinutes: number;
+  cycleMinutes?: number;
   question: string;
   options: string[];
   poll: Poll | null;
@@ -57,6 +58,36 @@ function lockKind(lock: ccc.Script): string {
   };
   return known[code] ?? `lock ${short(code)}`;
 }
+
+/** The server's answers, in the words of someone voting. */
+function plainError(reason: string): string {
+  const table: [RegExp, string][] = [
+    [/binding is frozen|vote is open/i, "Voting is open, so sign-up is paused. Try again when it ends."],
+    [/belongs to someone else/i, "That name is taken. Pick another name."],
+    [/nonce already used/i, "That signature was already used. Sign again."],
+    [/not the proof template|unknown nonce|issued|expired|too old/i, "The signature did not match the request. Sign again."],
+    [/lock exited|opens without|lock also opens/i, "Your wallet's signature did not check out. Sign again with this wallet."],
+    [/not live/i, "Part of your wallet changed on the network. Reconnect and sign again."],
+    [/too many requests/i, "Too many tries. Wait a minute and try again."],
+    [/node did not answer|could not answer/i, "The test network did not answer in time. Try again."],
+    [/no vote is open/i, "Voting has not started yet."],
+    [/bind a lock first/i, "Sign up first, before voting starts."],
+    [/reject|refus|cancel|denied|closed/i, "You cancelled in your wallet."],
+  ];
+  return table.find(([re]) => re.test(reason))?.[1] ?? reason;
+}
+
+/** Why one wallet counts as it does in a vote, in plain words. */
+function plainCount(l: { lockHash: string; weight: string; counted: boolean; reason: string }, cooldown: number): string {
+  const w = `Wallet ${short(l.lockHash)}`;
+  if (l.counted) return `${w}: ${ckb(l.weight)} in the Nervos DAO when voting opened${/withdrawing/.test(l.reason) ? " (a withdrawal in progress does not count)" : ""}.`;
+  if (/cooldown/.test(l.reason)) return `${w}: it was signed up under another name less than ${cooldown} minutes before voting, so it does not count yet.`;
+  if (/snapshot block/.test(l.reason)) return `${w}: signed up after voting opened, so it counts from the next vote.`;
+  if (/not live/.test(l.reason)) return `${w}: the wallet changed on the network since it signed up. Sign up again.`;
+  return `${w}: ${l.reason}`;
+}
+
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 export function App() {
   const { open, disconnect, wallet } = ccc.useCcc();
@@ -121,15 +152,15 @@ export function App() {
     if (!signer || !lock) return;
     setNote(null);
     try {
-      setBusy("Asking the demo for a message…");
+      setBusy("Preparing what your wallet will sign…");
       const n = await api<{ nonce: string; message: string; template: unknown }>("/api/nonce", { account, lock: { codeHash: lock.codeHash, hashType: lock.hashType, args: lock.args } });
-      setBusy("Sign in your wallet. It is a proof: it can never land on chain, and nothing leaves your account.");
+      setBusy("Sign in your wallet. It is not a payment: nothing leaves your wallet.");
       const signed = await signer.signTransaction(ccc.Transaction.from(n.template as ccc.TransactionLike));
-      setBusy("Checking the proof: the demo runs your lock as a node would…");
+      setBusy("Checking your signature…");
       const r = await api<{ account: string; cycles: string; movedFrom: string | null }>("/api/bind", { nonce: n.nonce, tx: JSON.parse(signed.stringify()) });
-      setNote({ ok: true, text: `Bound to ${r.account}. Your lock accepted the proof in ${Number(r.cycles).toLocaleString("en")} cycles.${r.movedFrom ? ` It was bound to ${r.movedFrom}: it carries no weight for ${state?.cooldownMinutes} minutes (rule 6).` : ""}` });
+      setNote({ ok: true, text: `Signed up as ${r.account}. Your wallet proved it is yours.${r.movedFrom ? ` It was signed up as ${r.movedFrom} before, so it starts counting for you in ${state?.cooldownMinutes} minutes.` : ""}` });
     } catch (e) {
-      setNote({ ok: false, text: (e as Error).message });
+      setNote({ ok: false, text: plainError((e as Error).message) });
     } finally {
       setBusy("");
       refresh();
@@ -140,7 +171,7 @@ export function App() {
     try {
       await api("/api/unbind", { lockHash });
     } catch (e) {
-      setNote({ ok: false, text: (e as Error).message });
+      setNote({ ok: false, text: plainError((e as Error).message) });
     }
     refresh();
   };
@@ -148,11 +179,11 @@ export function App() {
   const vote = async (choice: string) => {
     setNote(null);
     try {
-      setBusy("Reading your weight at the snapshot block…");
+      setBusy("Counting your deposits…");
       const r = await api<{ weight: string; locks: Vote["locks"] }>("/api/vote", { choice });
       setMyVote(r);
     } catch (e) {
-      setNote({ ok: false, text: (e as Error).message });
+      setNote({ ok: false, text: plainError((e as Error).message) });
     } finally {
       setBusy("");
       refresh();
@@ -168,11 +199,17 @@ export function App() {
   return (
     <main>
       <header>
-        <p className="tag">Testnet demo</p>
-        <h1>Prove your CKB lock, vote with your Nervos DAO deposits</h1>
+        <p className="tag">Testnet demo · no real money</p>
+        <h1>Vote with your Nervos DAO deposits, from any wallet</h1>
         <p>
-          Any wallet signs one proof that can never land on chain. The demo runs your lock on it, as a CKB node would, and binds the lock to an account. In each vote, the
-          Nervos DAO deposits under your bound locks count, read at one snapshot block. Built on <a href={REPO}>Ward</a>.
+          Connect your wallet and sign once to show it is yours. Nothing is sent and nothing leaves your wallet. Then vote: the CKB you have deposited in the Nervos DAO
+          decides how much your vote counts. This is a test vote on the CKB test network: it decides nothing, and real CKB is never used.
+        </p>
+        <p className="need">
+          <strong>How to take part:</strong> connect and sign up now, come back when voting opens, then press Yes or No.
+          <br />
+          <strong>What you need:</strong> only a wallet. MetaMask, UniSat and OKX work as they are; JoyID and Cellula open their test version, where you may need to log in or create an account.
+          No test CKB needed: without a test deposit your vote is recorded but weighs 0 CKB.
         </p>
       </header>
 
@@ -180,13 +217,17 @@ export function App() {
         {state ? (
           voting ? (
             <>
-              <strong>Vote open</strong> · snapshot block {state.poll?.snapshotBlock.toLocaleString("en")} · closes in {clock(phaseLeft)}
-              <span>Binding is frozen while a vote is open.</span>
+              <strong>Voting is open</strong> · ends in {clock(phaseLeft)}
+              <span>Sign-up is paused until it ends, so no one can vote twice with the same deposit.</span>
             </>
           ) : (
             <>
-              <strong>Binding open</strong> · the next vote opens in {clock(phaseLeft)}
-              <span>Bind now: a binding counts only when it was made before the vote's snapshot block.</span>
+              <strong>Sign-up is open</strong> · voting starts in {clock(phaseLeft)}
+              <span>
+                {mine.account
+                  ? `You are signed up as ${mine.account}. Come back in ${clock(phaseLeft)} to vote, in this browser.`
+                  : `Sign up before voting starts to take part. A test vote runs every ${state.cycleMinutes ?? 15} minutes; you can leave and come back in this browser.`}
+              </span>
             </>
           )
         ) : (
@@ -195,18 +236,18 @@ export function App() {
       </section>
 
       <section>
-        <h2>1. Your wallet</h2>
+        <h2>1. Connect your wallet</h2>
         {signer && lock ? (
           <div className="card">
             <p>
-              <strong>{wallet?.name ?? "Wallet"}</strong> · {lockKind(lock)}
+              <strong>{wallet?.name ?? "Wallet"}</strong> <span className="small">({lockKind(lock)})</span>
             </p>
             <p className="mono">{short(address)}</p>
             <p>
-              Nervos DAO deposits now:{" "}
-              {weight ? `${ckb(weight.weight)} in ${weight.deposits} deposit${weight.deposits === 1 ? "" : "s"}${weight.withdrawing ? ` (${weight.withdrawing} withdrawing, not counted)` : ""}` : "reading…"}
+              In the Nervos DAO: {weight ? ckb(weight.weight) : "reading…"}
+              {weight?.withdrawing ? " (a withdrawal in progress does not count)" : ""}
             </p>
-            {lockBound && <p className="ok">This lock is bound to {lockBound.account}.</p>}
+            {lockBound && <p className="ok">Signed up as {lockBound.account}.</p>}
             <button className="link" onClick={disconnect}>
               Use another wallet
             </button>
@@ -214,31 +255,34 @@ export function App() {
         ) : (
           <button onClick={open}>Connect a wallet</button>
         )}
-        <p className="small">Cellula, JoyID, MetaMask, UniSat, OKX, UTXO Global and the other wallets CCC connects, on testnet. With no deposit, your vote counts with weight 0.</p>
+        <p className="small">Works with Cellula, JoyID, MetaMask, UniSat, OKX, UTXO Global and more. Your wallet connects on the CKB test network.</p>
       </section>
 
       <section>
-        <h2>2. Bind it to an account</h2>
+        <h2>2. Sign up with your wallet</h2>
         <label>
-          Account name on this demo
-          <input value={account} onChange={(e) => setAccount(e.target.value.trim())} maxLength={64} placeholder="your name here" />
+          Your name in this vote (any name; the public list below shows it and the time you signed up)
+          <input value={account} onChange={(e) => setAccount(e.target.value.trim())} maxLength={64} placeholder="any name" />
         </label>
         <button disabled={!signer || !lock || !!busy || voting || closing || !account} onClick={bind}>
-          Prove and bind
+          Sign to prove it is yours
         </button>
-        {voting && <p className="small">Binding reopens when the vote closes.</p>}
-        {closing && <p className="small">The vote opens in {clock(phaseLeft)}, too soon to sign and be checked. Binding reopens when it closes.</p>}
+        {!signer && <p className="small">Connect your wallet first (step 1).</p>}
+        <p className="small">Your wallet asks you to sign a message that names this site and your name. It is not a payment: it can never be sent, and nothing leaves your wallet. Some wallets show it only as a code.</p>
+        {voting && <p className="small">Sign-up reopens when voting ends, in {clock(phaseLeft)}.</p>}
+        {closing && <p className="small">Voting starts in {clock(phaseLeft)}, too soon to finish signing up. Sign-up reopens after it.</p>}
         {mine.account && (
           <div className="card">
             <p>
-              You are <strong>{mine.account}</strong> on this browser.
+              You are signed up as <strong>{mine.account}</strong> in this browser.
             </p>
             {mine.bindings.map((b) => (
-              <p key={b.lock_hash} className="row">
-                <span className="mono">{short(b.lock_hash)}</span>
-                <span>block {b.bound_block.toLocaleString("en")}</span>
+              <p key={b.lock_hash} className="row small">
+                <span>
+                  Wallet {short(b.lock_hash)}, since {timeOf(b.bound_at)}
+                </span>
                 <button className="link" disabled={voting} onClick={() => unbind(b.lock_hash)}>
-                  unbind
+                  remove
                 </button>
               </p>
             ))}
@@ -251,41 +295,52 @@ export function App() {
         <p className="question">{state?.question}</p>
         {voting ? (
           mine.account ? (
-            <div className="choices">
-              {state?.options.map((o) => (
-                <button key={o} className={state?.me?.myVote === o ? "chosen" : ""} disabled={!!busy} onClick={() => vote(o)}>
-                  {o}
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="choices">
+                {state?.options.map((o) => (
+                  <button key={o} className={state?.me?.myVote === o ? "chosen" : ""} disabled={!!busy} onClick={() => vote(o)}>
+                    {o}
+                  </button>
+                ))}
+              </div>
+              <p className="small">You can change your vote until voting ends.</p>
+            </>
           ) : (
-            <p className="small">Bind a lock before the next vote opens to take part.</p>
+            <p className="small">To vote, sign up (steps 1 and 2) when this round ends, in {clock(phaseLeft)}. Yes and No buttons appear here in the next round.</p>
           )
         ) : (
-          <p className="small">The vote opens in {clock(phaseLeft)}. Each lock counts once, whichever account holds it.</p>
+          <p className="small">
+            Voting starts in {clock(phaseLeft)}. {mine.account ? "Yes and No buttons appear here then." : "Sign up first (steps 1 and 2); Yes and No buttons appear here when voting opens."}
+          </p>
         )}
         {myVote && (
           <div className="card">
-            <p>Your weight: {ckb(myVote.weight)}</p>
+            <p>Your vote counts as {ckb(myVote.weight)}.</p>
             {myVote.locks.map((l) => (
               <p key={l.lockHash} className="small">
-                <span className="mono">{short(l.lockHash)}</span> {l.counted ? ckb(l.weight) : "not counted"}: {l.reason}
+                {plainCount(l, state?.cooldownMinutes ?? 20)}
               </p>
             ))}
           </div>
         )}
-        {poll && (
+        {poll && poll.votes.length === 0 && <p className="small">{voting ? "No votes yet in this round." : "No one voted in the last round."}</p>}
+        {poll && poll.votes.length > 0 && (
           <div className="card">
             <p>
-              <strong>{voting ? "This vote so far" : "Last vote"}</strong> · snapshot block {poll.snapshotBlock.toLocaleString("en")}
+              <strong>{voting ? "Results so far" : "Last vote"}</strong>
             </p>
-            {state?.options.map((o) => (
-              <p key={o} className="row">
-                <span>{o}</span>
-                <span>{ckb(poll.totals[o]?.weight ?? "0")}</span>
-                <span>{poll.totals[o]?.accounts ?? 0} account(s)</span>
-              </p>
-            ))}
+            {state?.options.map((o) => {
+              const n = poll.totals[o]?.accounts ?? 0;
+              return (
+                <p key={o} className="row">
+                  <span>{o}</span>
+                  <span>{ckb(poll.totals[o]?.weight ?? "0")}</span>
+                  <span>
+                    {n} {n === 1 ? "person" : "people"}
+                  </span>
+                </p>
+              );
+            })}
           </div>
         )}
       </section>
@@ -294,28 +349,36 @@ export function App() {
       {note && <p className={note.ok ? "note ok" : "note bad"}>{note.text}</p>}
 
       <section>
-        <h2>Bindings, public (rule 9)</h2>
+        <h2>Who has signed up</h2>
         {all.length === 0 ? (
-          <p className="small">None yet.</p>
+          <p className="small">No one yet.</p>
         ) : (
           all.map((b) => (
             <p key={b.lock_hash} className="row small">
-              <span className="mono">{short(b.lock_hash)}</span>
               <span>{b.account}</span>
-              <span>block {b.bound_block.toLocaleString("en")}</span>
+              <span>since {timeOf(b.bound_at)}</span>
               {b.moved_from && <span>moved from {b.moved_from}</span>}
             </p>
           ))
         )}
+        <p className="small">The list is public, so anyone can check who takes part.</p>
       </section>
 
-      <footer>
+      <details className="how">
+        <summary>How it works</summary>
         <p>
-          What this follows: the platform rules in section 9 of the <a href={`${REPO}/blob/main/docs/SPEC.md`}>Ward spec</a>. The demo issues each message itself, burns each nonce once, keeps one binding per lock
-          (a moved one waits {state?.cooldownMinutes ?? 20} minutes), freezes binding during a vote, and counts only Nervos DAO deposits under the exact lock, live at the snapshot, from a proof whose cells were live then.
-          Testnet only; nothing here moves funds. Source in <a href={`${REPO}/tree/main/demo`}>demo/</a>.
+          What you sign is shaped like a payment that points at coins that do not exist, so the network can never accept it. The demo then checks your signature with the same
+          program the network would use for your wallet. If it passes, the wallet is yours. This method is called <a href={REPO}>Ward</a>.
         </p>
-      </footer>
+        <p>
+          Each vote counts the CKB deposited in the Nervos DAO at the moment voting opened. CKB you have started to withdraw does not count. Each wallet counts once. A wallet that moves to a
+          new name waits {state?.cooldownMinutes ?? 20} minutes before it counts again, and sign-up pauses during a vote, so deposits cannot be moved between names to vote twice.
+        </p>
+        <p>
+          For developers: these are the platform rules in section 9 of the <a href={`${REPO}/blob/main/docs/SPEC.md`}>Ward spec</a>, and the{" "}
+          <a href={`${REPO}/tree/main/demo`}>source code</a> is open.
+        </p>
+      </details>
     </main>
   );
 }
