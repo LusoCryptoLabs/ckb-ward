@@ -110,7 +110,7 @@ npm run typecheck
 npm test
 ```
 
-`tests/vectors/` holds real signed proofs: one secp256k1 proof from mainnet, replayed against mainnet's cell deps, and from testnet secp256k1, the JoyID app, the Cellula smart-account lock (starter and guarded), a 2-of-3 multisig, anyone-can-pay, Omnilock in Dogecoin mode and the Nostr lock. Each is replayed with controls that must be refused: another message, one flipped signature bit, a wrong key, a missing or forged settings cell dep, one multisig signature where two are needed, anyone-can-pay with no signature, an empty witness, and `test_tx_pool_accept` on the node. Other tests cover a smart account with capped keys, an Omnilock whose administrator signs for the owner, locks anyone can open, a lock that prints a fake result, and the verifier's limits, each next to a control that passes.
+`tests/vectors/` holds real signed proofs: one secp256k1 proof from mainnet, replayed against mainnet's cell deps, and from testnet secp256k1, the JoyID app with its main key and with a sub key, the Cellula smart-account lock (starter and guarded), a 2-of-3 multisig, anyone-can-pay, Omnilock in Dogecoin mode and the Nostr lock. Each is replayed with controls that must be refused: another message, one flipped signature bit, a wrong key, a missing or forged settings cell dep, one multisig signature where two are needed, anyone-can-pay with no signature, an empty witness, and `test_tx_pool_accept` on the node. Other tests cover a smart account with capped keys, an Omnilock whose administrator signs for the owner, locks anyone can open, a lock that prints a fake result, and the verifier's limits, each next to a control that passes.
 
 Without configuration, tests that run a lock are skipped. Set `CKB_DEBUGGER` (the executable) and, on Windows, `CKB_DEBUGGER_WSL` (the WSL distro that has it), or `WARD_VM` and `WARD_VM_WSL` for `ward-vm`. With both set, `tests/vm.test.ts` runs every vector under both and checks that they agree. Set `CKB_WARD_OFFLINE=1` to skip everything that needs the testnet RPC (`CKB_RPC_URL` overrides it).
 
@@ -126,7 +126,7 @@ The vectors depend on testnet cell deps staying live.
 
 Prototype, on npm as `ckb-ward`. Vectors are from testnet, and one from mainnet. The spec is a v1 draft and may change.
 
-Known gaps are listed in section 12 of the spec: JoyID sub-keys are untested, and locks with a time condition, or whose signature does not cover the transaction hash, are not covered.
+Known gaps are listed in section 12 of the spec: locks with a time condition, or whose signature does not cover the transaction hash, are not covered.
 
 ## License
 
