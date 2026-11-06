@@ -197,7 +197,7 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 
 ## 13. Locks tested
 
-All on testnet, under the v1 rules (input at u64::MAX, both probes on): V5 to V8 and the Omnilock administrator rows on 2026-11-05, the rest on 2026-11-04. "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
+All on testnet, under the v1 rules (input at u64::MAX, both probes on): V5 to V8 and the Omnilock administrator rows on 2026-11-05, V12 and V13 on 2026-11-06, the rest on 2026-11-04. "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
 
 | Lock | Signer | Result | Cycles | Controls, refused | In repo |
 | --- | --- | --- | --- | --- | --- |
@@ -213,6 +213,8 @@ All on testnet, under the v1 rules (input at u64::MAX, both probes on): V5 to V8
 | multisig 2-of-3 | CCC multisig signer, 2 members | accepted | 3,143,655 | one signature only -11; one key twice -52; a member and a non-member -52; flipped signature bit -52 | V5 |
 | anyone-can-pay | CCC private key signer | accepted | 1,610,026 | no signature -44; another key -31; flipped signature bit -31 | V6 |
 | Omnilock, Dogecoin mode | CCC Doge signer | accepted | 1,462,047 | another key -31; flipped signature bit -31 | V7 |
+| Omnilock, Ethereum mode (2026-11-06), the lock CCC gives MetaMask | CCC EVM signer, the wallet's personal_sign done in software | accepted | 1,476,174 | another key -31; flipped signature bit -31 | V12 |
+| Omnilock, Bitcoin mode (2026-11-06), the lock CCC gives UniSat and OKX | CCC BTC signer, the wallet's message signing done in software | accepted | 1,454,872 | another key -31; flipped signature bit -31 | V13 |
 | Omnilock, administrator mode, CCC's deployment | software keys, admin list cell fabricated in a local node stub | the lock accepts the admin's key (exit 0) and the owner's (exit 0); the verifier refuses both, rule 6 | about 1.5 million | not on the list 59; not on the list, naming the admin -31; no list cell 1 | test |
 | Omnilock, administrator mode, 2022 deployment | as above | the lock accepts the admin's key (exit 0); the owner's stops the VM; the verifier refuses both, rule 6 | about 1.5 million | as above | test |
 | Nostr lock | CCC Nostr signer | accepted | 4,169,370 | another key 26; flipped signature bit 18 | V8 |
@@ -930,3 +932,87 @@ Expected, against mainnet (ckb-debugger, and `ward-vm` under mainnet's consensus
 - bit 0 of witness byte 95 flipped (inside the signature): lock exit 11
 - probe (a), the same transaction with an empty witness: lock exit 4
 - `test_tx_pool_accept` on mainnet: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V12. Omnilock, Ethereum mode (MetaMask)
+
+File: `tests/vectors/omnilock-ethereum.json`. Omnilock with an Ethereum identity (args 0x12, the address, 0x00), the lock CCC gives an EVM wallet such as MetaMask. Random key made for the test. CCC's `SignerEvm` prepares the transaction and places the signature; the wallet's part, `personal_sign` of `CKB transaction: <sighash>`, is done by ethers' `Wallet.signMessage`, the same algorithm. The MetaMask app itself was not driven. 2026-11-06.
+
+Lock:
+
+```json
+{
+  "codeHash": "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb",
+  "hashType": "type",
+  "args": "0x122b22a5a98ad1c0d46b1360d6c60deccf6004b44400"
+}
+```
+
+Lock hash: `0x0046ff35b3e6f119a6dcaa86f21f42935e9a753dafcd20539604dde81ecb26a8`
+
+Message (268 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-evm
+Lock hash: 0x0046ff35b3e6f119a6dcaa86f21f42935e9a753dafcd20539604dde81ecb26a8
+Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+Issued at: 2026-11-06T12:00:00Z
+Nonce: n-evm
+```
+
+Out point tx hash P: `0x93faecfb0cc4bdea432b439ea97473af8ee6445c780ccb3c666af684fb1a1d12`
+
+Transaction hash: `0xdb64b4fd7dca7906adb9ee80938c1fa4f62d942ee607889be4314cf9771d43b9`
+
+Cell deps: the secp256k1 dep group `0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37:0` and the Omnilock code cell `0xec18bf0d857c981c3d1f4e17999b9b90c484b303378e94de1a57b0872f5d4602:0`, as CCC's testnet known scripts name them.
+
+Expected:
+
+- the proof: accepted, 1,476,174 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31 (`ERROR_IDENTITY_PUBKEY_BLAKE160_HASH`)
+- bit 0 of witness byte 80 (in the s half of the signature) flipped: lock exit -31
+- `controls.wrongKey` (another Ethereum key signed for this lock): lock exit -31
+- probe (a), the same transaction with an empty witness: lock exit 71; probe (b) is the other-message line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V13. Omnilock, Bitcoin mode (UniSat, OKX)
+
+File: `tests/vectors/omnilock-bitcoin.json`. Omnilock with a Bitcoin identity (args 0x04, hash160 of the compressed key, 0x00), the lock CCC gives a Bitcoin wallet such as UniSat or OKX. Random key made for the test. CCC's `SignerBtc` prepares the transaction and places the signature; the wallet's part, ECDSA message signing of `CKB (Bitcoin Layer) transaction: <sighash>` with the Bitcoin message prefix, is done in software with the same algorithm. The wallet apps themselves were not driven. 2026-11-06.
+
+Lock:
+
+```json
+{
+  "codeHash": "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb",
+  "hashType": "type",
+  "args": "0x042d53c358503ee728399394ab00a15846b05d85e800"
+}
+```
+
+Lock hash: `0x126a5e0697b8ba3a145a31aaf6663ca0e6f7c5b139e88efb4fff26ffe0ea8d7d`
+
+Message (268 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-btc
+Lock hash: 0x126a5e0697b8ba3a145a31aaf6663ca0e6f7c5b139e88efb4fff26ffe0ea8d7d
+Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+Issued at: 2026-11-06T12:00:00Z
+Nonce: n-btc
+```
+
+Out point tx hash P: `0xb3dde1b6b12369766a51a9ff11a389e8f3b9e90758dd8279472f1c7d16ea18e1`
+
+Transaction hash: `0x8e51155c1445556c6385cea5b3bced0cc0e54587ada4bf04d30ec88fd8b70812`
+
+Cell deps: the secp256k1 dep group `0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37:0` and the Omnilock code cell `0xec18bf0d857c981c3d1f4e17999b9b90c484b303378e94de1a57b0872f5d4602:0`, as CCC's testnet known scripts name them.
+
+Expected:
+
+- the proof: accepted, 1,454,872 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31 (`ERROR_IDENTITY_PUBKEY_BLAKE160_HASH`)
+- bit 0 of witness byte 80 (in the s half of the signature) flipped: lock exit -31
+- `controls.wrongKey` (another Bitcoin key signed for this lock): lock exit -31
+- probe (a), the same transaction with an empty witness: lock exit 71; probe (b) is the other-message line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
