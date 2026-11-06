@@ -1,0 +1,109 @@
+{
+ "name": "Omnilock, Bitcoin mode (UniSat, OKX)",
+ "about": "Omnilock with a Bitcoin identity, the lock CCC gives a Bitcoin wallet such as UniSat or OKX. Random key made for the test; CCC's SignerBtc prepares and places the signature, and the wallet's signMessage (ECDSA, Bitcoin message prefix, compressed key) is done in software with the same algorithm. Testnet, 2026-11-06.",
+ "lock": {
+  "codeHash": "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb",
+  "hashType": "type",
+  "args": "0x042d53c358503ee728399394ab00a15846b05d85e800"
+ },
+ "message": "dao.example wants you to prove control of a CKB lock.\nAccount: user-btc\nLock hash: 0x126a5e0697b8ba3a145a31aaf6663ca0e6f7c5b139e88efb4fff26ffe0ea8d7d\nChain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606\nIssued at: 2026-11-06T12:00:00Z\nNonce: n-btc",
+ "tx": {
+  "version": "0x0",
+  "cellDeps": [
+   {
+    "outPoint": {
+     "txHash": "0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37",
+     "index": "0x0"
+    },
+    "depType": "depGroup"
+   },
+   {
+    "outPoint": {
+     "txHash": "0xec18bf0d857c981c3d1f4e17999b9b90c484b303378e94de1a57b0872f5d4602",
+     "index": "0x0"
+    },
+    "depType": "code"
+   }
+  ],
+  "headerDeps": [],
+  "inputs": [
+   {
+    "previousOutput": {
+     "txHash": "0xb3dde1b6b12369766a51a9ff11a389e8f3b9e90758dd8279472f1c7d16ea18e1",
+     "index": "0xffffffff"
+    },
+    "since": "0x0"
+   }
+  ],
+  "outputs": [
+   {
+    "capacity": "0x731c89500",
+    "lock": {
+     "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "hashType": "data",
+     "args": "0x"
+    }
+   }
+  ],
+  "outputsData": [
+   "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d6274630a4c6f636b20686173683a203078313236613565303639376238626133613134356133316161663636363363613065366637633562313339653838656662346666663236666665306561386437640a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30365431323a30303a30305a0a4e6f6e63653a206e2d627463"
+  ],
+  "witnesses": [
+   "0x6900000010000000690000006900000055000000550000001000000055000000550000004100000020f502e47da3fd09cff331ab3edd5363038bbb0c0f5b22276e24f2b4c6ff85fc2b38365e1c116cc2e2be3d7b28ec37e3550c682e2277948afdfa7d5bfe2c6b8b0a"
+  ]
+ },
+ "signatureByte": 80,
+ "otherMessageExit": -31,
+ "signatureFlipExit": -31,
+ "controls": {
+  "wrongKey": {
+   "about": "A second random Bitcoin key signs the same template for the first key's lock.",
+   "exit": -31,
+   "tx": {
+    "version": "0x0",
+    "cellDeps": [
+     {
+      "outPoint": {
+       "txHash": "0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37",
+       "index": "0x0"
+      },
+      "depType": "depGroup"
+     },
+     {
+      "outPoint": {
+       "txHash": "0xec18bf0d857c981c3d1f4e17999b9b90c484b303378e94de1a57b0872f5d4602",
+       "index": "0x0"
+      },
+      "depType": "code"
+     }
+    ],
+    "headerDeps": [],
+    "inputs": [
+     {
+      "previousOutput": {
+       "txHash": "0xb3dde1b6b12369766a51a9ff11a389e8f3b9e90758dd8279472f1c7d16ea18e1",
+       "index": "0xffffffff"
+      },
+      "since": "0x0"
+     }
+    ],
+    "outputs": [
+     {
+      "capacity": "0x731c89500",
+      "lock": {
+       "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+       "hashType": "data",
+       "args": "0x"
+      }
+     }
+    ],
+    "outputsData": [
+     "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d6274630a4c6f636b20686173683a203078313236613565303639376238626133613134356133316161663636363363613065366637633562313339653838656662346666663236666665306561386437640a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30365431323a30303a30305a0a4e6f6e63653a206e2d627463"
+    ],
+    "witnesses": [
+     "0x690000001000000069000000690000005500000055000000100000005500000055000000410000002061aae332c48fe08e4c808051ac8711234d76fe463bffc6d128fe2fef4448887c7041d51e491ecc02db86423c1a4df1ead59ea8b9fab041ff9b5107fa4e99183f"
+    ]
+   }
+  }
+ }
+}
