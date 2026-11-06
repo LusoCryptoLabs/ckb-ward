@@ -8,7 +8,7 @@ import "./style.css";
 
 const testnet = new ccc.ClientPublicTestnet();
 
-/** CCC's wallets, with the Cellula wallet first. It is not in CCC's list yet; a site adds it this way. */
+/** CCC's wallets, with the Cellula wallet before the others (Khie stays on top). It is not in CCC's list yet; a site adds it this way. */
 class Signers extends ccc.SignersController {
   async addRealSigners(context: Parameters<ccc.SignersController["addRealSigners"]>[0]) {
     await this.addSigners("Cellula", cellulaIcon, [{ name: "CKB", signer: new CellulaWalletSigner(context.client) }], context);
