@@ -1,6 +1,6 @@
 {
   "name": "ckb-ward",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Ward, lock proof for CKB: prove control of any CKB lock by running the lock on a transaction that can never land",
   "license": "MIT",
   "author": "LusoCryptoLabs",
