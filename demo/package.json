@@ -1,0 +1,24 @@
+{
+  "name": "ward-demo",
+  "private": true,
+  "type": "module",
+  "description": "The Ward demo page: any CKB wallet proves its lock and its Nervos DAO deposits count in a test vote (testnet).",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build"
+  },
+  "dependencies": {
+    "@ckb-ccc/connector-react": "2.2.2",
+    "@ckb-ccc/core": "1.23.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.9.3",
+    "vite": "5.4.11"
+  }
+}

@@ -16,6 +16,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      - name: the demo page builds
+        working-directory: demo
+        run: npm ci && npm run build
       - uses: actions/cache@v4
         with:
           path: |
