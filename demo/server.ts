@@ -145,14 +145,17 @@ function owner(account: string): boolean {
   return !!db.prepare("SELECT 1 FROM bindings WHERE account = ? LIMIT 1").get(account);
 }
 
+/** Requests per minute, per address and per route: the page's polling must not use up the bind's allowance. */
 const hits = new Map<string, number[]>();
-function limit(req: IncomingMessage, perMinute: number) {
+function limit(req: IncomingMessage, route: string, perMinute: number) {
   const ip = (req.headers["x-real-ip"] as string) ?? req.socket.remoteAddress ?? "?";
+  const key = `${route} ${ip}`;
   const now = Date.now();
-  const recent = (hits.get(ip) ?? []).filter((t) => now - t < 60_000);
+  if (hits.size > 50_000) hits.clear();
+  const recent = (hits.get(key) ?? []).filter((t) => now - t < 60_000);
   if (recent.length >= perMinute) throw new HttpError(429, "too many requests, try again in a minute");
   recent.push(now);
-  hits.set(ip, recent);
+  hits.set(key, recent);
 }
 
 function send(res: ServerResponse, status: number, value: unknown, headers: Record<string, string> = {}) {
@@ -177,7 +180,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   const me = cookieAccount(req);
 
   if (req.method === "GET" && url.pathname === "/api/state") {
-    limit(req, 120);
+    limit(req, "state", 60);
     const p = phaseAt();
     const poll = await currentPoll();
     const last = db.prepare("SELECT * FROM polls WHERE id < ? ORDER BY id DESC LIMIT 1").get(p.id) as any;
@@ -197,13 +200,13 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/bindings") {
-    limit(req, 60);
+    limit(req, "bindings", 30);
     const rows = db.prepare("SELECT lock_hash, account, bound_at, bound_block, moved_from FROM bindings ORDER BY bound_at DESC LIMIT 200").all();
     return send(res, 200, { bindings: rows });
   }
 
   if (req.method === "POST" && url.pathname === "/api/weight") {
-    limit(req, 20);
+    limit(req, "weight", 20);
     const { lock } = await body(req);
     const script = ccc.Script.from(lock);
     const at = await tip();
@@ -212,7 +215,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/nonce") {
-    limit(req, 20);
+    limit(req, "nonce", 20);
     if (phaseAt().voting) throw new HttpError(409, "a vote is open: binding is frozen until it closes (rule 7)");
     const { account, lock } = await body(req);
     if (typeof account !== "string") throw new HttpError(400, "account missing");
@@ -233,7 +236,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/bind") {
-    limit(req, 10);
+    limit(req, "bind", 10);
     if (phaseAt().voting) throw new HttpError(409, "a vote is open: binding is frozen until it closes (rule 7)");
     const { nonce, tx } = await body(req);
     const row = db.prepare("SELECT * FROM nonces WHERE nonce = ?").get(String(nonce)) as any;
@@ -273,7 +276,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/unbind") {
-    limit(req, 10);
+    limit(req, "unbind", 10);
     if (phaseAt().voting) throw new HttpError(409, "a vote is open: binding is frozen until it closes (rule 7)");
     if (!me) throw new HttpError(401, "bind a lock first");
     const { lockHash } = await body(req);
@@ -284,7 +287,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/vote") {
-    limit(req, 10);
+    limit(req, "vote", 10);
     if (!me) throw new HttpError(401, "bind a lock first");
     const poll = await currentPoll();
     if (!poll) throw new HttpError(409, "no vote is open now");
@@ -298,6 +301,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/mine") {
+    limit(req, "mine", 30);
     if (!me) return send(res, 200, { account: null, bindings: [] });
     const rows = db.prepare("SELECT lock_hash, bound_at, bound_block, moved_from FROM bindings WHERE account = ?").all(me);
     return send(res, 200, { account: me, bindings: rows });
