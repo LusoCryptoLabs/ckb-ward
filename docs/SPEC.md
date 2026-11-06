@@ -192,7 +192,7 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 - **Locks that read the input's capacity.** They see u64::MAX. A lock that adds it to another amount could overflow and refuse an honest proof.
 - **Locks that need more than one input or more than one witness**, such as an owner lock that needs the owner's cell as a second input.
 - **Type scripts.** Never run. The proof is about the lock only.
-- **Mainnet.** V9 (2026-11-05) is a secp256k1 proof replayed by the tests against mainnet's cell deps, under ckb-debugger and under `ward-vm` with mainnet's consensus. A JoyID proof was accepted against mainnet once by hand on 2026-11-04 and is not a vector. The JoyID app on mainnet only accepts a requesting page served over https.
+- **Mainnet.** V9 (secp256k1, 2026-11-05) and V11 (JoyID, signed 2026-11-04) are replayed by the tests against mainnet's cell deps, under ckb-debugger and under `ward-vm` with mainnet's consensus. The JoyID app on mainnet only accepts a requesting page served over https.
 - **A production VM in production.** `ward-vm` (section 11) runs the node's script code under the chain's consensus, and every vector agrees with ckb-debugger under it. Running it for a platform, and moving its pin with node upgrades, is the platform's.
 
 ## 13. Locks tested
@@ -203,6 +203,7 @@ All on testnet, under the v1 rules (input at u64::MAX, both probes on): V5 to V8
 | --- | --- | --- | --- | --- | --- |
 | secp256k1_blake160 | CCC private key signer | accepted | 1,645,417 | wrong key, exit -31 | V1 |
 | secp256k1_blake160, MAINNET (2026-11-05) | CCC private key signer, mainnet cell deps | accepted | 1,653,447 | wrong key -31; flipped signature bit -31; a testnet platform, message names another chain | V9 |
+| JoyID, main key, MAINNET (signed 2026-11-04) | JoyID app (app.joyid.dev), mainnet cell deps | accepted | 6,809,238 | flipped signature bit 11; another message 12; empty witness 4 | V11 |
 | JoyID, main key | JoyID app (testnet.joyid.dev) | accepted | 6,905,201 | flipped signature bit, exit 11 | V2 |
 | JoyID, sub key (2026-11-06) | JoyID app on a second device, through CCC's JoyID signer | accepted | 6,957,775 | flipped signature bit 11; the sub key list from before the device was added 13; the CoTA cell that list lived in, refused as not live | V10 |
 | Cellula smart account, starter | software P-256 key, wallet's WebAuthn shape | accepted | 6,772,215 | wrong key, exit 26 | V3 |
@@ -233,7 +234,7 @@ The v0 draft had a second template for wallets that look inputs up on chain: a l
 
 ## Appendix: test vectors
 
-Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points (V9: mainnet), and every vector is valid only while they stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04 (V1 to V4) and 2026-11-05 (V5 to V8). V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4); the signed bytes are the v0 ones.
+Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points (V9 and V11: mainnet), and every vector is valid only while they stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04 (V1 to V4) and 2026-11-05 (V5 to V8). V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4); the signed bytes are the v0 ones.
 
 ### V1. secp256k1
 
@@ -888,3 +889,44 @@ Expected (ckb-debugger and `ward-vm` agree on every line):
 - the proof listing that spent cell instead: refused before the lock runs, the cell dep is not live; and `depsLiveAt` counts it live until the block that added the device, not from it
 - probe (a), the same transaction with an empty witness: lock exit 4
 - `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V11. JoyID, main key, mainnet
+
+File: `tests/vectors/mainnet-joyid.json`. A test account's main key on mainnet, signed in the JoyID app (app.joyid.dev, with the requesting page served over https) through an unmodified CCC `JoyId.CkbSigner`, on 2026-11-04.
+
+Lock:
+
+```json
+{
+  "codeHash": "0xd00c84f0ec8fd441c38bc3f87a371f547190f2fcff88e642bc5bf54b9e318323",
+  "hashType": "type",
+  "args": "0x0001ea0eba2dd6b055c9f3c8340fa06e70547e019a3a"
+}
+```
+
+Lock hash: `0xac55d7dab2e9a4b85775a811bb4063e94cc98182835681d1b7706a491abf6bcf`
+
+Message (289 bytes):
+
+```text
+cellula.id wants you to prove control of a CKB lock.
+Account: ward-joyid-test
+Lock hash: 0xac55d7dab2e9a4b85775a811bb4063e94cc98182835681d1b7706a491abf6bcf
+Chain: 0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5
+Issued at: 2026-11-04T20:21:09.847Z
+Nonce: 4341bba95d06c240
+```
+
+Out point tx hash P: `0x24357cea9b1ee851e43d27060c35e598fb250d18ac5e81446e8136dab57608c9`
+
+Transaction hash: `0xa38d4dee12352f4a424b4be8c702030f64517f9b327379b4d582ccae4785a1aa`
+
+Cell deps: the five JoyID deps on mainnet, `0x673e1843035ce9c249efc36b62865e7a7c9f6e2ca6fc9c66fd108307e81355f9:0` to `:4`.
+
+Expected, against mainnet (ckb-debugger, and `ward-vm` under mainnet's consensus, which agree):
+
+- the proof: accepted, 6,809,238 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 12
+- bit 0 of witness byte 95 flipped (inside the signature): lock exit 11
+- probe (a), the same transaction with an empty witness: lock exit 4
+- `test_tx_pool_accept` on mainnet: refused, `Unknown(OutPoint(<P>ffffffff))`

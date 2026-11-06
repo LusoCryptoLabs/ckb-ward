@@ -1,0 +1,80 @@
+{
+  "name": "JoyID, main key (mainnet)",
+  "about": "JoyID on MAINNET: a test account's main key, signed in the JoyID app (app.joyid.dev, the requesting page served over https) through an unmodified CCC JoyId.CkbSigner, against mainnet's cell deps. Mainnet, 2026-11-04.",
+  "network": "mainnet",
+  "lock": {
+    "codeHash": "0xd00c84f0ec8fd441c38bc3f87a371f547190f2fcff88e642bc5bf54b9e318323",
+    "hashType": "type",
+    "args": "0x0001ea0eba2dd6b055c9f3c8340fa06e70547e019a3a"
+  },
+  "message": "cellula.id wants you to prove control of a CKB lock.\nAccount: ward-joyid-test\nLock hash: 0xac55d7dab2e9a4b85775a811bb4063e94cc98182835681d1b7706a491abf6bcf\nChain: 0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5\nIssued at: 2026-11-04T20:21:09.847Z\nNonce: 4341bba95d06c240",
+  "tx": {
+    "version": "0x0",
+    "cellDeps": [
+      {
+        "outPoint": {
+          "txHash": "0x673e1843035ce9c249efc36b62865e7a7c9f6e2ca6fc9c66fd108307e81355f9",
+          "index": "0x0"
+        },
+        "depType": "code"
+      },
+      {
+        "outPoint": {
+          "txHash": "0x673e1843035ce9c249efc36b62865e7a7c9f6e2ca6fc9c66fd108307e81355f9",
+          "index": "0x1"
+        },
+        "depType": "code"
+      },
+      {
+        "outPoint": {
+          "txHash": "0x673e1843035ce9c249efc36b62865e7a7c9f6e2ca6fc9c66fd108307e81355f9",
+          "index": "0x2"
+        },
+        "depType": "code"
+      },
+      {
+        "outPoint": {
+          "txHash": "0x673e1843035ce9c249efc36b62865e7a7c9f6e2ca6fc9c66fd108307e81355f9",
+          "index": "0x3"
+        },
+        "depType": "code"
+      },
+      {
+        "outPoint": {
+          "txHash": "0x673e1843035ce9c249efc36b62865e7a7c9f6e2ca6fc9c66fd108307e81355f9",
+          "index": "0x4"
+        },
+        "depType": "code"
+      }
+    ],
+    "headerDeps": [],
+    "inputs": [
+      {
+        "previousOutput": {
+          "txHash": "0x24357cea9b1ee851e43d27060c35e598fb250d18ac5e81446e8136dab57608c9",
+          "index": "0xffffffff"
+        },
+        "since": "0x0"
+      }
+    ],
+    "outputs": [
+      {
+        "capacity": "0x7aef40a00",
+        "lock": {
+          "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "hashType": "data",
+          "args": "0x"
+        }
+      }
+    ],
+    "outputsData": [
+      "0x63656c6c756c612e69642077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20776172642d6a6f7969642d746573740a4c6f636b20686173683a203078616335356437646162326539613462383537373561383131626234303633653934636339383138323833353638316431623737303661343931616266366263660a436861696e3a203078393262313937616131666261306636333633333932326336316339323337356339633037346139336538353936333535346635343939666531343530643065350a4973737565642061743a20323032362d31312d30345432303a32313a30392e3834375a0a4e6f6e63653a2034333431626261393564303663323430"
+    ],
+    "witnesses": [
+      "0x68010000100000006801000068010000540100000128225bb834176f6e4ab74c9434274065b682f693edfce81d53367db02239d64006af6d05d59383a4579608b4e00a0af3684f15494b4e1b26e9ac8f0e9dda9aa092c0fe5eb7b29a493a9fc19a38d0cd0b89f9d4a33fba44ff1949e2e1b2925dcc688220c310a98fedfe9806b51a25088acb0b4ba738db39764dda2e5b40f5c383d280d9320d7862ad09b32103900596a08ba01a51863a8aac3f5ac1969360ae301d000000007b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224e6d4e6d4d4463344f5745324f4467334e6a6c6d4d7a417a5a6a417a4d324a6a597a45335954466c4e475532597a51344e7a49354e32466d59325977597a4d355a6a4d345a5752694d475a69596d4d794f5749344d77222c226f726967696e223a2268747470733a2f2f6170702e6a6f792e6964222c2263726f73734f726967696e223a66616c73657d"
+    ]
+  },
+  "signatureByte": 95,
+  "otherMessageExit": 12,
+  "signatureFlipExit": 11
+}
