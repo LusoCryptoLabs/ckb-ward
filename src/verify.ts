@@ -85,8 +85,9 @@ export const MAX_DEP_GROUP_MEMBERS = 32;
  */
 export const MAX_TX_BYTES = 597_000;
 /**
- * Default largest witness. The largest measured here is 592 bytes (Nostr lock); this leaves room
- * for post-quantum signatures (SLH-DSA 256f is 49,856 bytes by its parameter set, not measured here).
+ * Default largest witness. The largest measured here is 7,913 bytes (quantum-resistant lock, one
+ * SLH-DSA-SHA2-128s key); this leaves room for larger parameter sets (SLH-DSA 256f is 49,856 bytes,
+ * not measured here).
  */
 export const MAX_WITNESS_BYTES = 65_536;
 /** Default timeout of one chain read. */
