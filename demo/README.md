@@ -24,7 +24,7 @@ snapshot at the tip, binding is frozen, and it closes 5 minutes later.
 
 The lock runs under `ward-vm`, built from `vm/` in the image, with testnet's consensus at the tip.
 
-The wallet list is CCC's, with the Cellula wallet added first through a `SignersController` subclass (`src/main.tsx`, `CellulaWalletSigner` from `cellula-sdk`), since CCC does not list it yet.
+The wallet list is CCC's, with the Cellula wallet added before the other wallets (CCC keeps its own Khie on top) through a `SignersController` subclass (`src/main.tsx`, `CellulaWalletSigner` from `cellula-sdk`), since CCC does not list it yet.
 
 ## Run it
 
