@@ -331,7 +331,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (req.method === "GET" && url.pathname === "/api/mine") {
     limit(req, "mine", 30);
     if (!me) return send(res, 200, { account: null, bindings: [] });
-    const rows = db.prepare("SELECT lock_hash, bound_at, bound_block, moved_from FROM bindings WHERE account = ?").all(me);
+    // The lock too, so the page can show this account's addresses rather than lock hashes.
+    const rows = (db.prepare("SELECT lock_hash, lock, bound_at, bound_block, moved_from FROM bindings WHERE account = ?").all(me) as any[]).map((r) => ({ ...r, lock: JSON.parse(r.lock) }));
     return send(res, 200, { account: me, bindings: rows });
   }
 
