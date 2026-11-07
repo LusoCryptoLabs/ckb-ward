@@ -55,8 +55,9 @@ button {
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.link { background: none; color: var(--accent); padding: 0; min-height: 0; text-decoration: underline; font-weight: 500; }
 .choices { display: flex; gap: 10px; flex-wrap: wrap; }
-.choices button { flex: 1 1 120px; background: var(--card); color: var(--fg); border: 2px solid var(--line); }
-.choices button.chosen { border-color: var(--accent); }
+.choices button { flex: 1 1 120px; min-height: 52px; font-size: 1.05rem; }
+.choices button:not(.chosen) { background: var(--card); color: var(--accent); border: 2px solid var(--accent); }
+.choices button.chosen { background: var(--accent); color: var(--accent-fg); border: 2px solid var(--accent); }
 label { display: block; font-size: 0.9rem; color: var(--muted); margin-bottom: 10px; }
 input {
   display: block; width: 100%; margin-top: 4px; font: inherit; padding: 10px 12px;
@@ -80,3 +81,23 @@ input {
 .how summary { cursor: pointer; font-weight: 600; color: var(--fg); padding: 6px 0; }
 .how p { margin: 10px 0; }
 .need { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 0.92rem; }
+
+.lead { color: var(--muted); margin: 0 0 4px; }
+.step h2 { display: flex; align-items: center; gap: 10px; }
+.num { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--accent); color: var(--accent); font-size: 0.9rem; flex: none; }
+.num.done { background: var(--accent); color: var(--accent-fg); }
+.big { font-size: 1.25rem; font-weight: 700; }
+.big .small { font-weight: 400; }
+button.copy { min-height: 32px; padding: 4px 10px; font-size: 0.85rem; background: var(--card); color: var(--accent); border: 1px solid var(--line); }
+button.primary { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; font-size: 1.05rem; }
+button.primary:disabled { opacity: 0.7; }
+.will, .waiting { border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.will { background: var(--bg); }
+.waiting { background: var(--bind); }
+.waiting p { margin: 4px 0; }
+.shows { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; overflow-wrap: anywhere; word-break: break-all; }
+.shows b { color: var(--fg); background: var(--bind); border-radius: 3px; padding: 0 1px; }
+.warn { padding: 10px 12px; border-radius: 8px; background: var(--vote); margin: 10px 0; font-size: 0.92rem; }
+.spin { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; vertical-align: -2px; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } }
