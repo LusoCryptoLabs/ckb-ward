@@ -12,12 +12,16 @@ RUN cargo build --release --locked
 
 # The page.
 FROM node:24-bookworm-slim AS web
+WORKDIR /app
+# The browser-only examples import ../src/wallet.ts; the type-check resolves @ckb-ccc/core for
+# those files from the library's own install, so bring the library and its deps in first.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+COPY src/ src/
 WORKDIR /app/playground
 COPY playground/package.json playground/package-lock.json ./
 RUN npm ci
 COPY playground/ ./
-# The browser-only examples import ../src/wallet.ts, so the library source must be present.
-COPY src/ /app/src/
 RUN npm run build
 
 # The server: Node runs the TypeScript of src/ and playground/server.ts as it is.
