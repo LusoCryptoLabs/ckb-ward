@@ -120,9 +120,18 @@ function serveStatic(req: IncomingMessage, res: ServerResponse) {
 
 // --- proof verifying ---------------------------------------------------------------------------
 
+/** Parse a lock from a request, turning a malformed one into a 400 rather than a 500. */
+function parseLock(lock: unknown): ccc.Script {
+  try {
+    return ccc.Script.from(lock as ccc.ScriptLike);
+  } catch {
+    throw new HttpError(400, "bad lock");
+  }
+}
+
 /** Issue a message and its template for a lock on one network. The account is the caller's own choice (the demos use the address). */
 async function issue(account: string, lockLike: ccc.ScriptLike, network: Net) {
-  const script = ccc.Script.from(lockLike);
+  const script = parseLock(lockLike);
   const nonce = randomBytes(16).toString("hex");
   const issuedAt = new Date().toISOString();
   let text: string;
@@ -211,7 +220,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     limit(req, "weight", 20);
     const { lock, network } = await body(req);
     const n = net(network);
-    const script = ccc.Script.from(lock);
+    const script = parseLock(lock);
     const at = await tip(n);
     const w = await daoWeightAt(RPC[n], script, at);
     return send(res, 200, { block: at, weight: w.weight, deposits: w.deposits.length, withdrawing: w.withdrawing.length });
