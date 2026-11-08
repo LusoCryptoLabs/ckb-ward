@@ -4,14 +4,17 @@
   --muted: #566b60;
   --card: #ffffff;
   --line: #dde6d8;
-  --accent: #19714d;
-  --accent-2: #8fcf3f;
-  --lime: #c8f169;
+  --accent: #1c6e4a;
+  --accent-2: #7d9a46;
+  --lime: #a7c06a;
   --accent-fg: #ffffff;
+  --btn: #1c6e4a;
+  --btn-fg: #f1f5e9;
+  --btn-shadow: #123f2c;
   --ok: #1f6b3a;
   --bad: #9b2c22;
-  --glow: rgba(143, 207, 63, 0.35);
-  --badge: linear-gradient(145deg, #1e7a54, #12543a);
+  --glow: rgba(125, 154, 70, 0.2);
+  --badge: linear-gradient(145deg, #2a6f4d, #16533a);
   --display: "VT323", ui-monospace, "Courier New", monospace;
   color-scheme: light;
 }
@@ -22,14 +25,17 @@
     --muted: #93a79b;
     --card: #161f1a;
     --line: #26332c;
-    --accent: #c8f169;
-    --accent-2: #8fcf3f;
-    --lime: #c8f169;
+    --accent: #a6c56d;
+    --accent-2: #7d9a46;
+    --lime: #a6c56d;
     --accent-fg: #0e1a12;
+    --btn: #2f7a54;
+    --btn-fg: #eef3e3;
+    --btn-shadow: #0b3121;
     --ok: #8fd39f;
     --bad: #f2a199;
-    --glow: rgba(200, 241, 105, 0.22);
-    --badge: linear-gradient(145deg, #1d2a22, #121b16);
+    --glow: rgba(166, 197, 109, 0.16);
+    --badge: linear-gradient(145deg, #223228, #121b16);
     color-scheme: dark;
   }
 }
@@ -74,7 +80,7 @@ body::after {
 }
 main { max-width: 760px; margin: 0 auto; padding: 18px 16px 56px; }
 a { color: var(--accent); }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; background: var(--card); border: 1px solid var(--line); border-radius: 2px; padding: 0 5px; }
 
 .site { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0 2px; }
 .brand { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; color: var(--fg); font-family: var(--display); font-weight: 400; font-size: 1.7rem; letter-spacing: 0.02em; }
@@ -93,12 +99,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 26px 0; }
 .tile {
   position: relative; display: flex; flex-direction: column; gap: 8px;
-  background: var(--card); border: 2px solid var(--line); border-radius: 10px; padding: 18px;
+  background: var(--card); border: 2px solid var(--line); border-radius: 3px; padding: 18px;
   text-decoration: none; color: var(--fg);
-  box-shadow: 4px 4px 0 color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--btn) 22%, transparent);
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
-.tile:hover, .tile:focus-visible { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--accent); border-color: var(--accent); outline: none; }
+.tile:hover, .tile:focus-visible { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--btn); border-color: var(--btn); outline: none; }
 .tile h2 { font-family: var(--display); font-weight: 400; font-size: 1.5rem; letter-spacing: 0.01em; margin: 2px 0 0; }
 .tile p { color: var(--muted); font-size: 0.9rem; margin: 0; flex: 1; }
 .tile-go { color: var(--accent); font-weight: 700; font-size: 0.9rem; margin-top: 2px; }
@@ -115,29 +121,47 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .ex { margin-top: 4px; }
 .ex-title { display: flex; align-items: center; gap: 12px; font-family: var(--display); font-weight: 400; font-size: 2.1rem; margin: 6px 0 14px; letter-spacing: 0.01em; }
 
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-top: 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03); }
+.card { background: var(--card); border: 2px solid var(--line); border-radius: 4px; padding: 14px 16px; margin-top: 12px; }
 .card p { margin: 5px 0; }
 .card.connect { margin-bottom: 4px; }
 h2 { font-size: 1.1rem; margin: 0 0 10px; }
 
+/* Retro buttons: square corners, a hard offset shadow, and a press that pushes into it. */
 button {
-  font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 10px; border: 0;
-  background: var(--accent); color: var(--accent-fg); cursor: pointer; min-height: 44px;
+  font: inherit; font-weight: 700; padding: 9px 16px; border-radius: 2px;
+  border: 2px solid var(--btn); background: var(--btn); color: var(--btn-fg); cursor: pointer; min-height: 44px;
+  box-shadow: 3px 3px 0 var(--btn-shadow);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-button.link { background: none; color: var(--accent); padding: 0; min-height: 0; text-decoration: underline; font-weight: 500; }
-button.copy { min-height: 32px; padding: 4px 10px; font-size: 0.85rem; background: transparent; color: var(--accent); border: 1px solid var(--line); border-radius: 8px; }
-button.primary { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; font-size: 1.05rem; margin-top: 6px; border-radius: 12px; }
-button.primary:disabled { opacity: 0.7; }
+button:hover { box-shadow: 4px 4px 0 var(--btn-shadow); }
+button:active { transform: translate(3px, 3px); box-shadow: 0 0 0 transparent; }
+button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; transform: none; }
+button.link { background: none; border: 0; color: var(--accent); padding: 0; min-height: 0; text-decoration: underline; font-weight: 500; box-shadow: none; }
+button.link:hover { box-shadow: none; }
+button.link:active { transform: none; }
+button.copy { min-height: 32px; padding: 3px 10px; font-size: 0.85rem; background: transparent; color: var(--accent); border: 2px solid var(--line); box-shadow: 2px 2px 0 var(--btn-shadow); }
+button.primary { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; font-size: 1.05rem; margin-top: 8px; }
+button.primary:disabled { opacity: 0.6; }
 .choices { display: flex; gap: 10px; flex-wrap: wrap; }
 .choices button { flex: 1 1 120px; min-height: 52px; font-size: 1.05rem; }
 .choices button:not(.chosen) { background: var(--card); color: var(--accent); border: 2px solid var(--accent); }
-.choices button.chosen { background: var(--accent); color: var(--accent-fg); border: 2px solid var(--accent); }
+.choices button.chosen { background: var(--btn); color: var(--btn-fg); border: 2px solid var(--btn); }
+
+/* The testnet/mainnet switch in the nav. */
+.netswitch { display: inline-flex; border: 2px solid var(--line); border-radius: 2px; overflow: hidden; }
+.netswitch button {
+  font-family: var(--display); font-size: 1rem; text-transform: uppercase; letter-spacing: 0.06em;
+  min-height: 0; padding: 3px 12px; border: 0; border-radius: 0; background: var(--card); color: var(--muted); box-shadow: none;
+}
+.netswitch button:hover { box-shadow: none; }
+.netswitch button:active { transform: none; }
+.netswitch button + button { border-left: 2px solid var(--line); }
+.netswitch button.on { background: var(--btn); color: var(--btn-fg); }
 
 label { display: block; font-size: 0.9rem; color: var(--muted); margin-bottom: 10px; }
 input, textarea {
   display: block; width: 100%; margin-top: 4px; font: inherit; padding: 10px 12px;
-  border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg);
+  border: 2px solid var(--line); border-radius: 2px; background: var(--bg); color: var(--fg);
 }
 input:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; border-color: var(--accent); }
 textarea { resize: vertical; min-height: 120px; }
@@ -153,12 +177,12 @@ input.mono, textarea.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Co
 .row { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .row > .small:first-child { flex: 0 0 76px; }
 .big { font-size: 1.25rem; font-weight: 700; }
-.note { padding: 10px 14px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); margin-top: 10px; }
+.note { padding: 10px 14px; border-radius: 3px; background: var(--card); border: 2px solid var(--line); margin-top: 10px; }
 .note.ok, .ok { color: var(--ok); }
 .note.bad { color: var(--bad); }
-.waiting { border-radius: 10px; padding: 10px 12px; margin: 10px 0; background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); }
+.waiting { border-radius: 3px; padding: 10px 12px; margin: 10px 0; background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 2px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
 .waiting p { margin: 4px 0; }
-.shows { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere; word-break: break-all; }
+.shows { background: var(--bg); border: 2px solid var(--line); border-radius: 2px; padding: 8px 10px; overflow-wrap: anywhere; word-break: break-all; }
 pre.shows { white-space: pre-wrap; margin: 6px 0 0; }
 pre.shows.template { max-height: 340px; overflow: auto; word-break: normal; }
 .shows b { color: var(--fg); background: color-mix(in srgb, var(--accent-2) 30%, transparent); border-radius: 3px; padding: 0 1px; }

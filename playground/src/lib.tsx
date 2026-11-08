@@ -26,38 +26,39 @@ export const ckb = (shannons: string | bigint) => {
   return `${whole.toLocaleString("en")}${cents ? `.${cents.toString().padStart(2, "0")}` : ""} CKB`;
 };
 
-const OMNILOCK = "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb";
+// Lock code hashes, by network, from CCC's known scripts. secp256k1 and multisig match across
+// networks; the rest differ.
+const OMNILOCK = ["0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb", "0x9b819793a64463aed77c615d6cb226eea5487ccfc0783043a587254cda2b6f26"];
+const PW_LOCK = ["0x58c5f491aba6d61678b7cf7edf4910b1f5e00ec0cde2f42e0abb4fd9aff25a63", "0xbf43c3602455798c1a61a596e0d95278864c552fafe231c063b3fabf97a8febc"];
+const JOYID = ["0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac", "0xd00c84f0ec8fd441c38bc3f87a371f547190f2fcff88e642bc5bf54b9e318323"];
+const ACP = ["0x3419a1c09eb2567f6552ee7a8ecffd64155cffe0f1796e6e61ec088d740c1356", "0xd369597ff47f29fbc0d47d2e3775370d1250b85140c670e4718af712983a2354"];
+const SECP = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8";
+const MULTISIG = "0x5c5069eb0857efc65e1bca0c07df34c31663b3622fd3876c876320fc9634e2a8";
 const CELLULA = "0x8f73d5d875b70c248c281052c9f67e2d7a2dbbee47a1ae71e68f44fed47b436e";
-const PW_LOCK = "0x58c5f491aba6d61678b7cf7edf4910b1f5e00ec0cde2f42e0abb4fd9aff25a63";
-const JOYID = "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac";
 
-/** A plain name for the lock a wallet uses, from its code hash (testnet). */
+/** A plain name for the lock a wallet uses, from its code hash, on either network. */
 export function lockKind(lock: ccc.Script): string {
-  if (lock.codeHash === OMNILOCK) {
+  if (OMNILOCK.includes(lock.codeHash)) {
     const mode = { "00": "CKB key", "01": "older Ethereum", "12": "Ethereum", "04": "Bitcoin", "05": "Dogecoin", "06": "multisig" }[lock.args.slice(2, 4)];
     return `Omnilock${mode ? `, ${mode} mode` : ""}`;
   }
-  const known: Record<string, string> = {
-    "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8": "secp256k1",
-    [JOYID]: "JoyID",
-    "0x3419a1c09eb2567f6552ee7a8ecffd64155cffe0f1796e6e61ec088d740c1356": "anyone-can-pay",
-    "0x5c5069eb0857efc65e1bca0c07df34c31663b3622fd3876c876320fc9634e2a8": "multisig",
-    [CELLULA]: "Cellula smart account",
-    [PW_LOCK]: "Portal Wallet",
-  };
+  if (JOYID.includes(lock.codeHash)) return "JoyID";
+  if (ACP.includes(lock.codeHash)) return "anyone-can-pay";
+  if (PW_LOCK.includes(lock.codeHash)) return "Portal Wallet";
+  const known: Record<string, string> = { [SECP]: "secp256k1", [MULTISIG]: "multisig", [CELLULA]: "Cellula smart account" };
   return known[lock.codeHash] ?? `lock ${shortHash(lock.codeHash)}`;
 }
 
 /** What the wallet shows when it signs, which the lock and CCC decide. */
 export function walletWillShow(lock: ccc.Script, wallet: string, domain: string): string {
-  const flag = lock.codeHash === OMNILOCK ? lock.args.slice(2, 4) : "";
+  const flag = OMNILOCK.includes(lock.codeHash) ? lock.args.slice(2, 4) : "";
   const shaped = "It says transaction because the proof is shaped like one, but it spends coins that do not exist, so it can never go through.";
   if (lock.codeHash === CELLULA) return `Cellula opens a page that says “${domain} asks you to prove this wallet is yours”, with this address.`;
-  if (lock.codeHash === PW_LOCK || flag === "01")
+  if (PW_LOCK.includes(lock.codeHash) || flag === "01")
     return `${wallet} opens a “Signature request” that shows only a code: 0x and 64 letters and digits. It may name Ethereum as the network. This page shows the same code while ${wallet} is open, so you can check they match.`;
   if (flag === "12") return `${wallet} shows “CKB transaction: 0x…” and may name Ethereum as the network. ${shaped} This page shows the same text while ${wallet} is open.`;
   if (flag === "04") return `${wallet} shows “CKB (Bitcoin Layer) transaction: 0x…”. ${shaped} This page shows the same text while ${wallet} is open.`;
-  if (lock.codeHash === JOYID) return "JoyID opens and asks you to sign with your passkey.";
+  if (JOYID.includes(lock.codeHash)) return "JoyID opens and asks you to sign with your passkey.";
   return `${wallet} asks you to sign. It may call it a transaction or show a code.`;
 }
 
@@ -103,6 +104,7 @@ export function Shows({ text }: { text: string }) {
 
 // --- wallet context: connect, pick an address, and run a proof --------------------------------
 
+export type Net = "testnet" | "mainnet";
 export type Stage = "" | "preparing" | "wallet" | "checking";
 type Choice = { script: ccc.Script; address: string };
 type Prepared = { key: string; nonce: string; template: unknown; at: number };
@@ -129,7 +131,7 @@ export const useWallet = () => {
   return c;
 };
 
-export function WalletProvider({ children }: { children: ReactNode }) {
+export function WalletProvider({ network, children }: { network: Net; children: ReactNode }) {
   const { open, disconnect, wallet } = ccc.useCcc();
   const signer = ccc.useSigner();
   const [choices, setChoices] = useState<Choice[]>([]);
@@ -162,7 +164,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const first = await signer.getRecommendedAddressObj();
       const all = await signer.getAddressObjs().catch(() => [first]);
       const seen = new Set<string>();
-      const picked = [first, ...all].filter((o) => o.script.codeHash !== PW_LOCK);
+      const picked = [first, ...all].filter((o) => !PW_LOCK.includes(o.script.codeHash));
       const list = (picked.length ? picked : [first])
         .filter((o) => !seen.has(o.script.hash()) && !!seen.add(o.script.hash()))
         .slice(0, 4)
@@ -191,7 +193,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     let gone = false;
     const t = setTimeout(async () => {
       try {
-        const n = await api<{ nonce: string; template: unknown }>("/api/nonce", { account: address, lock: plainScript(lock) });
+        const n = await api<{ nonce: string; template: unknown }>("/api/nonce", { account: address, lock: plainScript(lock), network });
         if (!gone) prepared.current = { key: prepKey, nonce: n.nonce, template: n.template, at: Date.now() };
       } catch {
         /* the run will fetch a fresh one */
@@ -201,7 +203,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       gone = true;
       clearTimeout(t);
     };
-  }, [signer, lock, address, prepKey, stage, minute]);
+  }, [signer, lock, address, prepKey, stage, minute, network]);
 
   const prove = useCallback(
     async <T,>(endpoint: string): Promise<T> => {
@@ -221,7 +223,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         let n = prepared.current?.key === prepKey && Date.now() - prepared.current.at < PREPARED_FOR_MS ? prepared.current : null;
         if (!n) {
           setStage("preparing");
-          const fresh = await api<{ nonce: string; template: unknown }>("/api/nonce", { account: address, lock: plainScript(lock) });
+          const fresh = await api<{ nonce: string; template: unknown }>("/api/nonce", { account: address, lock: plainScript(lock), network });
           n = { key: prepKey, nonce: fresh.nonce, template: fresh.template, at: Date.now() };
         }
         setStage("wallet");
@@ -236,7 +238,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setWalletShows(null);
       }
     },
-    [signer, lock, address, prepKey],
+    [signer, lock, address, prepKey, network],
   );
 
   const value: Ctx = {
