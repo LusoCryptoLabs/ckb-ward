@@ -199,6 +199,7 @@ pre.shows.template { max-height: 340px; overflow: auto; word-break: normal; }
 @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } .tile { transition: none; } .hero h1::after { animation: none; } }
 
 .dev-note { border-left: 2px solid var(--line); padding-left: 10px; margin: 2px 0 10px; }
+.try { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 2px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: 3px; padding: 8px 12px; margin: 10px 0 0; font-size: 0.92rem; }
 .dev { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 6px; }
 .dev summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 0.85rem; padding: 2px 0; }
 .dev p { margin: 6px 0; }

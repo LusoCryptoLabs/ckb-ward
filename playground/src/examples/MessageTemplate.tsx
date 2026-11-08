@@ -36,6 +36,9 @@ export function MessageTemplate() {
       <p className="small dev-note">
         For developers: built in your browser with <code>message</code> and <code>proofTemplate</code> from <code>ckb-ward/wallet</code>.
       </p>
+      <p className="try">
+        <strong>Try it.</strong> Change any field below and the message updates as you type.
+      </p>
       <div className="card">
         <label>
           Website asking

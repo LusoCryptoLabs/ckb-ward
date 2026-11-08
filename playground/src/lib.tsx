@@ -111,6 +111,7 @@ type Prepared = { key: string; nonce: string; template: unknown; at: number };
 type Ctx = {
   signer: ccc.Signer | undefined;
   walletName: string;
+  network: Net;
   domain: string;
   open: () => void;
   disconnect: () => void;
@@ -244,6 +245,7 @@ export function WalletProvider({ network, children }: { network: Net; children: 
   const value: Ctx = {
     signer,
     walletName: wallet?.name ?? "Your wallet",
+    network,
     domain,
     open,
     disconnect,
