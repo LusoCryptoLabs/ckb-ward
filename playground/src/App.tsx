@@ -43,10 +43,10 @@ const IconMessage = () => (
 );
 
 const EXAMPLES = [
-  { id: "prove", title: "Prove a lock", blurb: "Any wallet proves it controls its lock, checked in CKB-VM.", Icon: IconProve, Comp: Prove },
-  { id: "signin", title: "Sign in", blurb: "A session from one signature. EIP-1271 and BIP-322, for CKB.", Icon: IconSignIn, Comp: SignIn },
-  { id: "read", title: "Read a proof", blurb: "See what a wallet sees in a proof request, in the browser.", Icon: IconRead, Comp: ReadProof },
-  { id: "message", title: "Message & template", blurb: "The proof built byte by byte, as you type.", Icon: IconMessage, Comp: MessageTemplate },
+  { id: "prove", title: "Prove a wallet is yours", blurb: "Show a wallet belongs to you with one signature. Nothing is sent.", Icon: IconProve, Comp: Prove },
+  { id: "signin", title: "Sign in with a wallet", blurb: "Enter a site with your wallet, no password and no account.", Icon: IconSignIn, Comp: SignIn },
+  { id: "read", title: "What a wallet shows", blurb: "See what your wallet shows you when a site asks you to prove it.", Icon: IconRead, Comp: ReadProof },
+  { id: "message", title: "What you sign", blurb: "See exactly what your wallet is asked to sign, in plain text.", Icon: IconMessage, Comp: MessageTemplate },
 ];
 
 /** The Ward mark: the favicon's lettered cell. */
@@ -65,8 +65,8 @@ function Logo() {
 function Footer() {
   return (
     <footer className="small">
-      Ward is open source. Read the <a href={SPEC}>spec</a>, the <a href={REPO}>code</a>, or the package on <a href={NPM}>npm</a>. For a full platform built on it, see the{" "}
-      <a href={VOTE_DEMO}>DAO voting demo</a>.
+      Ward is open source, and it is the CKB counterpart of Ethereum's EIP-1271 and Bitcoin's BIP-322. Read the <a href={SPEC}>spec</a>, the <a href={REPO}>code</a>, or the package on{" "}
+      <a href={NPM}>npm</a>. For a full platform built on it, see the <a href={VOTE_DEMO}>DAO voting demo</a>.
     </footer>
   );
 }
@@ -92,7 +92,14 @@ export function App({ network, setNetwork }: { network: Net; setNetwork: (n: Net
           <div className="site-right">
             <div className="netswitch" role="group" aria-label="Network">
               {(["testnet", "mainnet"] as const).map((n) => (
-                <button key={n} type="button" className={network === n ? "on" : ""} aria-pressed={network === n} onClick={() => setNetwork(n)}>
+                <button
+                  key={n}
+                  type="button"
+                  className={network === n ? "on" : ""}
+                  aria-pressed={network === n}
+                  title={n === "testnet" ? "Practice network, nothing here is real" : "The real network"}
+                  onClick={() => setNetwork(n)}
+                >
                   {n}
                 </button>
               ))}
@@ -118,11 +125,11 @@ export function App({ network, setNetwork }: { network: Net; setNetwork: (n: Net
           <>
             <header className="hero">
               <h1>
-                Lock proof for <span className="grad">CKB</span>
+                Prove a wallet is <span className="grad">yours</span>
               </h1>
               <p className="lead">
-                Prove any wallet controls its lock, by running the lock on a transaction that can never land. The CKB counterpart of Ethereum's EIP-1271 and Bitcoin's BIP-322. Try each
-                piece.
+                Show that a CKB wallet belongs to you, with a single signature. Nothing is sent and nothing is spent, on any network. It is how you link a wallet to an account, sign in, or
+                prove what you hold, without moving anything. Try each piece below.
               </p>
             </header>
             <div className="tiles">

@@ -30,12 +30,15 @@ export function MessageTemplate() {
   return (
     <section>
       <p className="lead">
-        What a proof is made of, built as you type, in your browser with <code>message</code> and <code>proofTemplate</code> from <code>ckb-ward/wallet</code>. The message names the platform,
-        the account, the lock, the chain, the time and a single-use nonce. The template is a transaction that can never land.
+        See exactly what your wallet is asked to sign when it proves a wallet is yours: a short, readable message (who is asking, which wallet, when) and a transaction shaped so it can never
+        move your coins. Change the fields and watch it update.
+      </p>
+      <p className="small dev-note">
+        For developers: built in your browser with <code>message</code> and <code>proofTemplate</code> from <code>ckb-ward/wallet</code>.
       </p>
       <div className="card">
         <label>
-          Domain
+          Website asking
           <input value={domain} onChange={(e) => setDomain(e.target.value)} />
         </label>
         <label>
@@ -43,19 +46,19 @@ export function MessageTemplate() {
           <input value={account} onChange={(e) => setAccount(e.target.value)} />
         </label>
         <label>
-          Issued at (RFC 3339 UTC)
+          Time
           <input value={issuedAt} onChange={(e) => setIssuedAt(e.target.value)} />
           <button className="link" onClick={() => setIssuedAt(new Date().toISOString().replace(/\.\d+Z$/, "Z"))}>
             Use now
           </button>
         </label>
         <label>
-          Nonce
+          One-time code
           <input value={nonce} onChange={(e) => setNonce(e.target.value)} />
         </label>
         <p className="small">
-          Lock: {lockKind(lock)} · <span className="mono">{shortHash(lock.hash())}</span>
-          {connected ? " (your connected address)" : " (a sample lock; connect a wallet to use yours)"}
+          Wallet: {lockKind(lock)} · <span className="mono">{shortHash(lock.hash())}</span>
+          {connected ? " (your connected wallet)" : " (a sample; connect a wallet to use yours)"}
         </p>
       </div>
       {out.error ? (
@@ -73,19 +76,18 @@ export function MessageTemplate() {
           </div>
           <div className="card">
             <p>
-              <strong>The fake out point</strong>
+              <strong>Why this can never take your coins</strong>
             </p>
-            <p className="small">The template's one input points here. Its tx hash is ckbhash of the tag, the lock hash and the message, so no real cell can ever have it:</p>
-            <p className="mono small">
-              {shortHash(out.txHash)} : 0xffffffff
+            <p className="small">
+              The signature is shaped like a transaction, but it spends from a made-up place that holds no real coins. So even if someone copied this signature, it could never move anything.
             </p>
-          </div>
-          <div className="card">
-            <p>
-              <strong>The proof template</strong>
-            </p>
-            <p className="small">This is what the wallet signs, like any transaction. Cell deps and witnesses are the wallet's to fill.</p>
-            <pre className="shows mono template">{out.template}</pre>
+            <details className="dev">
+              <summary>For developers</summary>
+              <p className="small">The one input points at an out point derived from the message, so no live cell can match it:</p>
+              <p className="mono small">{shortHash(out.txHash)} : 0xffffffff</p>
+              <p className="small">The whole transaction the wallet signs:</p>
+              <pre className="shows mono template">{out.template}</pre>
+            </details>
           </div>
         </>
       )}

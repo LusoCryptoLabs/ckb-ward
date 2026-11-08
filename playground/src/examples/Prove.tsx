@@ -22,35 +22,35 @@ export function Prove() {
   return (
     <section>
       <p className="lead">
-        The core of Ward. Your wallet signs a proof, and the server runs your lock in CKB-VM to check it. It works with every lock, because it runs the lock itself. Nothing is sent to the
-        chain.
+        Show that a wallet belongs to you. You sign once, and this page checks that the signature really came from your wallet. Nothing is sent and it costs nothing. This is how a site can
+        link your wallet to an account, or let you prove you hold what you hold, without moving anything. It works with any CKB wallet.
       </p>
       <Connect />
       {signer && lock && (
         <div className="card">
-          <SignButton label="Prove this lock is mine" onClick={run} />
-          <p className="small">Not a payment: the proof points at coins that do not exist, so it can never go through. It costs nothing.</p>
+          <SignButton label="Prove this wallet is mine" onClick={run} />
+          <p className="small">This is not a payment. What you sign can never move coins, so it costs nothing.</p>
         </div>
       )}
       {note && <p className="note bad">{note}</p>}
       {result && (
         <div className="card">
           <p className="ok">
-            <strong>✓ The lock accepted the signature.</strong>
+            <strong>✓ Done. This wallet is yours.</strong>
           </p>
-          <p className="small">Ward resolved the proof's cell deps from the chain and ran your lock on it. It exited 0{result.cycles ? `, in ${Number(result.cycles).toLocaleString("en")} cycles` : ""}.</p>
-          <p className="row">
-            <span className="small">Lock</span>
-            <span>{lock ? lockKind(lock) : ""}</span>
-          </p>
-          <p className="small">
-            Cell deps it ran with ({result.cellDeps.length}). The lock's code and settings live here; the proof stays valid while all of them are live.
-          </p>
-          {result.cellDeps.map((d) => (
-            <p key={`${d.txHash}:${d.index}`} className="mono small">
-              {shortHash(d.txHash)}:{d.index}
+          <p className="small">We checked your signature with the very program your wallet uses to approve a transaction, and it accepted. Nothing was sent.</p>
+          <details className="dev">
+            <summary>For developers</summary>
+            <p className="small">
+              Ward ran the lock in CKB-VM and it exited 0{result.cycles ? `, in ${Number(result.cycles).toLocaleString("en")} cycles` : ""}. Lock: {lock ? lockKind(lock) : ""}.
             </p>
-          ))}
+            <p className="small">Cell deps it ran with ({result.cellDeps.length}); the proof stays valid while all of them are live:</p>
+            {result.cellDeps.map((d) => (
+              <p key={`${d.txHash}:${d.index}`} className="mono small">
+                {shortHash(d.txHash)}:{d.index}
+              </p>
+            ))}
+          </details>
         </div>
       )}
     </section>

@@ -36,20 +36,21 @@ export function SignIn() {
   return (
     <section>
       <p className="lead">
-        Sign in to a site with any CKB wallet, with one signature and no account to create. This is what EIP-1271 does on Ethereum and BIP-322 on Bitcoin, for every CKB lock. The server
-        issues a session only after Ward checks the proof.
+        Sign in to a website with your wallet, the way you would "sign in with Google", but it is your CKB wallet. No password and no account to create: one signature and you are in. Nothing
+        is sent.
       </p>
+      <p className="small dev-note">For developers: the CKB counterpart of EIP-1271 and BIP-322. The server starts a session only after Ward checks the proof.</p>
       {me.account ? (
         <>
           <div className="card">
             <p className="ok">
-              <strong>✓ Signed in</strong>
+              <strong>✓ You are in</strong>
             </p>
             <p className="row">
               <span className="small">as</span>
               <span className="mono">{shortAddress(me.account)}</span>
             </p>
-            <p className="small">A session cookie was set after the proof checked out. This panel is behind that session: without it the server shows nothing here.</p>
+            <p className="small">We gave this browser a session after checking your signature. The panel below is only shown once you are signed in.</p>
             <button className="link" disabled={busy} onClick={signOut}>
               Sign out
             </button>
@@ -58,7 +59,7 @@ export function SignIn() {
             <p>
               <strong>Members only</strong>
             </p>
-            <p className="small">You can see this because you proved you control the address above. A real site would show a profile, a dashboard, or gated content here.</p>
+            <p className="small">You can see this because you proved you control the wallet above. A real site would show your profile, a dashboard, or members' content here.</p>
           </div>
         </>
       ) : (
