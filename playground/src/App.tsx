@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { NPM, REPO, SPEC, VOTE_DEMO, WalletProvider, type Net } from "./lib";
+import { NPM, REPO, SPEC, VOTE_DEMO, WalletControl, WalletProvider, type Net } from "./lib";
 import { Prove } from "./examples/Prove";
 import { SignIn } from "./examples/SignIn";
 import { ReadProof } from "./examples/ReadProof";
@@ -89,12 +89,15 @@ export function App({ network, setNetwork }: { network: Net; setNetwork: (n: Net
       <main>
         <nav className="site">
           <Logo />
-          <div className="netswitch" role="group" aria-label="Network">
-            {(["testnet", "mainnet"] as const).map((n) => (
-              <button key={n} type="button" className={network === n ? "on" : ""} aria-pressed={network === n} onClick={() => setNetwork(n)}>
-                {n}
-              </button>
-            ))}
+          <div className="site-right">
+            <div className="netswitch" role="group" aria-label="Network">
+              {(["testnet", "mainnet"] as const).map((n) => (
+                <button key={n} type="button" className={network === n ? "on" : ""} aria-pressed={network === n} onClick={() => setNetwork(n)}>
+                  {n}
+                </button>
+              ))}
+            </div>
+            <WalletControl />
           </div>
         </nav>
 

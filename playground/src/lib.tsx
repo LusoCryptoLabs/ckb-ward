@@ -258,25 +258,38 @@ export function WalletProvider({ network, children }: { network: Net; children: 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
 
-/** The connect bar: connect, show the wallet and address, pick another address. */
-export function Connect() {
-  const { signer, walletName, open, disconnect, choices, lock, address, choose, stage } = useWallet();
-  const [copied, setCopied] = useState(false);
+/** The central connect/disconnect control, in the header. The connection is global, so one place
+ * drives it for every example. */
+export function WalletControl() {
+  const { signer, lock, walletName, address, open, disconnect, stage } = useWallet();
   if (!signer || !lock)
     return (
-      <div className="card connect">
-        <button onClick={open}>Connect a wallet</button>
-        <p className="small">Cellula, JoyID, MetaMask, UniSat, OKX, UTXO Global and more. JoyID and Cellula open their testnet version. No test CKB needed.</p>
-      </div>
+      <button className="wc-connect" disabled={!!stage} onClick={open}>
+        Connect a wallet
+      </button>
     );
+  return (
+    <span className="wc">
+      <span className="wc-id" title={address}>
+        {walletName}
+      </span>
+      <button className="link wc-x" disabled={!!stage} onClick={disconnect}>
+        Disconnect
+      </button>
+    </span>
+  );
+}
+
+/** In an example: the connected wallet's address and address picker, or a nudge to connect above. */
+export function Connect() {
+  const { signer, walletName, choices, lock, address, choose, stage } = useWallet();
+  const [copied, setCopied] = useState(false);
+  if (!signer || !lock) return <p className="small">Connect a wallet at the top of the page to try this. Cellula, JoyID, MetaMask, UniSat, OKX, UTXO Global and more. No test CKB needed.</p>;
   return (
     <div className="card connect">
       <p className="row">
         <strong>{walletName}</strong>
         <span className="small">{lockKind(lock)}</span>
-        <button className="link" disabled={!!stage} onClick={disconnect}>
-          Disconnect
-        </button>
       </p>
       <p className="row">
         <span className="mono">{shortAddress(address)}</span>
