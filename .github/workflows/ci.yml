@@ -19,6 +19,9 @@ jobs:
       - name: the demo page builds
         working-directory: demo
         run: npm ci && npm run build
+      - name: the playground page builds
+        working-directory: playground
+        run: npm ci && npm run build
       - uses: actions/cache@v4
         with:
           path: |
