@@ -10,6 +10,8 @@ The full standard, with byte-exact templates, the rules a platform must follow, 
 
 Try it on testnet: [ward-demo.lusocryptolabs.com](https://ward-demo.lusocryptolabs.com) binds a lock from any wallet CCC connects and counts its Nervos DAO deposits in a test vote. Its source, a reference platform for the rules, is in [demo/](demo/).
 
+The [playground](playground/) runs each part on its own: prove a lock, sign in, read a proof, and build the message and template.
+
 ## Why
 
 Voting platforms on CKB today accept one signature type. Metaforo, for example, binds only Neuron-style signatures (secp256k1 signed messages). A CKB lock is a program, so holders whose deposits sit under JoyID, a multisig, Omnilock or a smart-account lock have no way to link them. Checking each signature scheme separately does not scale: every new lock needs new verifier code and new wallet code.

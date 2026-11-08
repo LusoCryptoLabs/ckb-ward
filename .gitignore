@@ -2,3 +2,4 @@ node_modules/
 dist/
 vm/target/
 demo/data/
+playground/data/
