@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ccc } from "@ckb-ccc/connector-react";
 import { message, proofTemplate, readProof } from "../../../src/wallet.ts";
 import { shortHash } from "../lib";
@@ -18,56 +18,50 @@ export function ReadProof() {
   const [fields, setFields] = useState<Fields | null>(null);
   const [note, setNote] = useState("");
 
-  const read = () => {
+  const read = (text: string) => {
     setNote("");
     setFields(null);
     let tx: ccc.Transaction;
     try {
-      tx = ccc.Transaction.from(JSON.parse(input));
+      tx = ccc.Transaction.from(JSON.parse(text));
     } catch {
-      setNote("That is not a transaction in JSON.");
+      setNote("That is not a request in JSON.");
       return;
     }
     const lock = tx.inputs[0]?.cellOutput?.lock;
     if (!lock) {
-      setNote("The transaction's input carries no lock, so there is nothing to check it against.");
+      setNote("This request has nothing to check against.");
       return;
     }
     const f = readProof(tx, lock);
     if (!f) {
-      setNote("Not a proof: it is not the template for this lock and the message in its output.");
+      setNote("This is not a request to prove a wallet.");
       return;
     }
     setFields(f as Fields);
   };
 
+  // Read the sample straight away, so the plain result is the first thing seen.
+  useEffect(() => read(sample), [sample]);
+
   return (
     <section>
       <p className="lead">
-        How a wallet knows a request is a proof, not a transfer, so it can show the domain asking for it. This runs entirely in your browser, with <code>readProof</code> from{" "}
-        <code>ckb-ward/wallet</code>. No server.
+        When a site asks you to prove your wallet, a good wallet shows you who is asking and what for, not a confusing transaction. Here is what your wallet would make of such a request: who is
+        asking, the account, the time.
       </p>
-      <div className="card">
-        <label>
-          A proof transaction, in JSON (the sample is a proof for a sample lock)
-          <textarea className="mono" value={input} onChange={(e) => setInput(e.target.value)} rows={10} spellCheck={false} />
-        </label>
-        <button className="primary" onClick={read}>
-          Read it
-        </button>
-        <button className="link" onClick={() => (setInput(sample), setFields(null), setNote(""))}>
-          Reset to the sample
-        </button>
-      </div>
+      <p className="small dev-note">
+        For developers: this runs entirely in your browser with <code>readProof</code> from <code>ckb-ward/wallet</code>. No server.
+      </p>
       {note && <p className="note bad">{note}</p>}
       {fields && (
         <div className="card">
           <p className="ok">
-            <strong>✓ This is a proof request.</strong>
+            <strong>✓ A request to prove a wallet</strong>
           </p>
-          <p className="small">A wallet shows the domain next to the origin of the site that asked, and the account, instead of a transfer:</p>
+          <p className="small">Your wallet shows who is asking and the account, instead of a transaction:</p>
           <p className="row">
-            <span className="small">Domain</span>
+            <span className="small">Site</span>
             <span>{fields.domain}</span>
           </p>
           <p className="row">
@@ -75,23 +69,34 @@ export function ReadProof() {
             <span className="mono">{fields.account}</span>
           </p>
           <p className="row">
-            <span className="small">Lock</span>
+            <span className="small">Wallet</span>
             <span className="mono">{shortHash(fields.lockHash)}</span>
           </p>
           <p className="row">
-            <span className="small">Chain</span>
+            <span className="small">Network</span>
             <span className="mono">{shortHash(fields.chain)}</span>
           </p>
           <p className="row">
-            <span className="small">Issued at</span>
+            <span className="small">Time</span>
             <span>{fields.issuedAt}</span>
           </p>
           <p className="row">
-            <span className="small">Nonce</span>
+            <span className="small">One-time code</span>
             <span className="mono">{fields.nonce}</span>
           </p>
         </div>
       )}
+      <details className="dev">
+        <summary>See the raw request, or paste your own</summary>
+        <p className="small">This is the exact request a site sends. Your wallet turns it into the plain summary above.</p>
+        <textarea className="mono" value={input} onChange={(e) => setInput(e.target.value)} rows={10} spellCheck={false} />
+        <button className="primary" onClick={() => read(input)}>
+          Read it
+        </button>
+        <button className="link" onClick={() => (setInput(sample), read(sample))}>
+          Reset to the example
+        </button>
+      </details>
     </section>
   );
 }

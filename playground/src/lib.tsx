@@ -273,7 +273,7 @@ export function WalletControl() {
       <span className="wc-id" title={address}>
         {walletName}
       </span>
-      <button className="link wc-x" disabled={!!stage} onClick={disconnect}>
+      <button className="wc-disc" disabled={!!stage} onClick={disconnect}>
         Disconnect
       </button>
     </span>
@@ -299,7 +299,7 @@ export function Connect() {
       </p>
       {choices.length > 1 && (
         <fieldset className="pick">
-          <legend className="small">This wallet has {choices.length} addresses. Pick one to use in the examples.</legend>
+          <legend className="small">This wallet has {choices.length} addresses. The first one is fine for most people; pick another only if you need a specific one.</legend>
           {choices.map((c) => (
             <label key={c.script.hash()}>
               <input type="radio" name="address" checked={lock.hash() === c.script.hash()} disabled={!!stage} onChange={() => choose(c)} />

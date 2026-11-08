@@ -86,9 +86,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .site-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .wc-connect { min-height: 0; padding: 5px 12px; font-size: 0.92rem; box-shadow: 2px 2px 0 var(--btn-shadow); }
 .wc-connect:hover { box-shadow: 3px 3px 0 var(--btn-shadow); }
-.wc { display: inline-flex; align-items: center; gap: 10px; border: 2px solid var(--line); border-radius: 2px; padding: 3px 10px; max-width: 100%; }
+.wc { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; }
 .wc-id { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wc-x { flex: none; }
+.wc-disc { flex: none; min-height: 0; padding: 5px 12px; font-size: 0.9rem; background: transparent; color: var(--accent); border: 2px solid var(--accent); box-shadow: 2px 2px 0 var(--btn-shadow); }
+.wc-disc:hover { box-shadow: 3px 3px 0 var(--btn-shadow); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .brand { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; color: var(--fg); font-family: var(--display); font-weight: 400; font-size: 1.7rem; letter-spacing: 0.02em; }
 .brand-cell { fill: var(--accent); }
 .brand-w { stroke: var(--accent-fg); }
@@ -196,5 +197,10 @@ pre.shows.template { max-height: 340px; overflow: auto; word-break: normal; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } .tile { transition: none; } .hero h1::after { animation: none; } }
+
+.dev-note { border-left: 2px solid var(--line); padding-left: 10px; margin: 2px 0 10px; }
+.dev { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 6px; }
+.dev summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 0.85rem; padding: 2px 0; }
+.dev p { margin: 6px 0; }
 
 footer { margin-top: 40px; border-top: 1px solid var(--line); padding-top: 16px; }
