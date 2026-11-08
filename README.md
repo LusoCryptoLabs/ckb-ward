@@ -8,9 +8,7 @@ The wallet signs a transaction that can never be committed. The verifier rebuild
 
 The full standard, with byte-exact templates, the rules a platform must follow, and test vectors, is in [docs/SPEC.md](docs/SPEC.md).
 
-Try it on testnet: [ward-demo.lusocryptolabs.com](https://ward-demo.lusocryptolabs.com) binds a lock from any wallet CCC connects and counts its Nervos DAO deposits in a test vote. Its source, a reference platform for the rules, is in [demo/](demo/).
-
-The [playground](playground/) runs each part on its own: prove a lock, sign in, read a proof, and build the message and template.
+Try it on testnet. The [playground](https://ward-play.lusocryptolabs.com) runs each part on its own: prove a lock, sign in, read a proof, and build the message and template ([source](playground/)). The [voting demo](https://ward-demo.lusocryptolabs.com) is a full reference platform for the rules: it binds a lock from any wallet CCC connects and counts its Nervos DAO deposits in a test vote ([source](demo/)).
 
 ## Why
 

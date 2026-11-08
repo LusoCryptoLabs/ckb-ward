@@ -4,6 +4,8 @@ Runnable examples of Ward, the way [app.ckbccc.com](https://app.ckbccc.com) is f
 connects, signs a proof, and the server runs the lock in CKB-VM to check it. Testnet, nothing is
 sent to the chain.
 
+Live on testnet: [ward-play.lusocryptolabs.com](https://ward-play.lusocryptolabs.com).
+
 Examples:
 
 - **Prove a lock.** Any wallet proves it controls its lock. The server reports the exit code, the
