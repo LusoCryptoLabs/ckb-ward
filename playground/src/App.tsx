@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { NPM, REPO, SPEC, VOTE_DEMO, WalletProvider } from "./lib";
+import { NPM, REPO, SPEC, VOTE_DEMO, WalletProvider, type Net } from "./lib";
 import { Prove } from "./examples/Prove";
 import { SignIn } from "./examples/SignIn";
 import { ReadProof } from "./examples/ReadProof";
@@ -71,7 +71,7 @@ function Footer() {
   );
 }
 
-export function App() {
+export function App({ network, setNetwork }: { network: Net; setNetwork: (n: Net) => void }) {
   const [active, setActive] = useState(() => location.hash.slice(1));
   useEffect(() => {
     const f = () => {
@@ -84,12 +84,18 @@ export function App() {
   const current = EXAMPLES.find((e) => e.id === active);
 
   return (
-    <WalletProvider>
+    <WalletProvider network={network}>
       <div className="bg" aria-hidden="true" />
       <main>
         <nav className="site">
           <Logo />
-          <span className="tag">Testnet · no real money</span>
+          <div className="netswitch" role="group" aria-label="Network">
+            {(["testnet", "mainnet"] as const).map((n) => (
+              <button key={n} type="button" className={network === n ? "on" : ""} aria-pressed={network === n} onClick={() => setNetwork(n)}>
+                {n}
+              </button>
+            ))}
+          </div>
         </nav>
 
         {current ? (
