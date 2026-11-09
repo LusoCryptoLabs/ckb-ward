@@ -14,10 +14,31 @@ async function runRaw(v: Vector, tx: ccc.Transaction, deps?: MockTransaction["mo
   return runLockFor(v)!(mockTransaction(tx, proofInput(v.lock), deps ?? (await resolveCellDeps(rpcFor(v), tx.cellDeps))));
 }
 
+// A saved proof can only be replayed while the cells its deps point at are still live; a lock upgrade
+// or a redeployment spends one, and the vector goes stale. That is the verifier working (depsLiveAt),
+// not a bug here, so the replay tests skip such a vector with a note instead of failing. Checked once
+// per vector, and only online (the replay tests are already skipped offline).
+const STALE_DEP = /cell dep 0x[0-9a-f]{64}:\d+ is not live/;
+const staleChecks = new Map<string, Promise<string | null>>();
+function staleReason(v: Vector): Promise<string | null> {
+  if (!staleChecks.has(v.file)) {
+    staleChecks.set(
+      v.file,
+      resolveCellDeps(rpcFor(v), ccc.Transaction.from(v.tx).cellDeps).then(
+        () => null,
+        (e) => (e instanceof Error && STALE_DEP.test(e.message) ? e.message : null),
+      ),
+    );
+  }
+  return staleChecks.get(v.file)!;
+}
+
 for (const v of vectors) {
   const proof = { lock: v.lock, message: v.message, tx: v.tx };
 
   test(`${v.name}: accepted`, { skip: NO_VM }, async (t) => {
+    const stale = await staleReason(v);
+    if (stale) return t.skip(stale);
     const r = await verify(proof, opts(v, v.message));
     t.diagnostic(show(r));
     assert.equal(r.ok, true);
@@ -28,6 +49,8 @@ for (const v of vectors) {
   });
 
   test(`${v.name}: control, another message`, { skip: NO_VM }, async (t) => {
+    const stale = await staleReason(v);
+    if (stale) return t.skip(stale);
     const r = await verify({ ...proof, message: otherMessage(v.message) }, opts(v, otherMessage(v.message)));
     t.diagnostic(`verifier: ${show(r)}`);
     assert.equal(r.ok, false);
@@ -44,6 +67,8 @@ for (const v of vectors) {
   });
 
   test(`${v.name}: the empty witness probe is refused by the lock`, { skip: NO_VM }, async (t) => {
+    const stale = await staleReason(v);
+    if (stale) return t.skip(stale);
     const tx = ccc.Transaction.from(v.tx);
     tx.witnesses = ["0x"];
     const raw = await runRaw(v, tx);
@@ -52,6 +77,8 @@ for (const v of vectors) {
   });
 
   test(`${v.name}: control, one signature bit flipped`, { skip: NO_VM }, async (t) => {
+    const stale = await staleReason(v);
+    if (stale) return t.skip(stale);
     const r = await verify({ ...proof, tx: flipWitnessByte(v.tx, v.signatureByte) }, opts(v, v.message));
     t.diagnostic(show(r));
     assert.equal(r.ok, false);
@@ -60,6 +87,8 @@ for (const v of vectors) {
 
   for (const [name, c] of Object.entries(v.controls ?? {})) {
     test(`${v.name}: control, ${name}`, { skip: NO_VM }, async (t) => {
+      const stale = await staleReason(v);
+      if (stale) return t.skip(stale);
       const r = await verify({ ...proof, tx: c.tx }, opts(v, v.message));
       t.diagnostic(show(r));
       assert.equal(r.ok, false);
