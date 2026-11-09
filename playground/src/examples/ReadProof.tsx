@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ccc } from "@ckb-ccc/connector-react";
 import { message, proofTemplate, readProof } from "../../../src/wallet.ts";
 import { shortHash, useWallet } from "../lib";
@@ -22,6 +22,8 @@ export function ReadProof() {
   const [fields, setFields] = useState<Fields | null>(null);
   const [note, setNote] = useState("");
   const [mine, setMine] = useState(false);
+  const [flash, setFlash] = useState(false);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   const read = (text: string) => {
     setNote("");
@@ -31,32 +33,46 @@ export function ReadProof() {
       tx = ccc.Transaction.from(JSON.parse(text));
     } catch {
       setNote("That is not a request in JSON.");
-      return;
+      return false;
     }
     const l = tx.inputs[0]?.cellOutput?.lock;
     if (!l) {
       setNote("This request has nothing to check against.");
-      return;
+      return false;
     }
     const f = readProof(tx, l);
     if (!f) {
       setNote("This is not a request to prove a wallet.");
-      return;
+      return false;
     }
     setFields(f as Fields);
+    return true;
   };
 
-  // Read the sample straight away, so the plain result is the first thing seen.
-  useEffect(() => read(sample), [sample]);
+  // A read triggered by the person: read, then jump to the result and flash it, so the effect is
+  // visible even when the result did not change or sits above the button.
+  const show = (text: string, isMine: boolean) => {
+    setMine(isMine);
+    read(text);
+    setFlash(false);
+    setTimeout(() => {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFlash(true);
+      setTimeout(() => setFlash(false), 900);
+    }, 60);
+  };
 
-  // Build a real request for the connected wallet and read it, so the result is the person's own.
+  // Read the sample straight away (no jump), so the plain result is the first thing seen.
+  useEffect(() => {
+    read(sample);
+  }, [sample]);
+
   const seeMine = () => {
     if (!lock) return;
     const text = message({ domain, account: "you", lock, chain: GENESIS[network], issuedAt: new Date(), nonce: Math.random().toString(36).slice(2, 12) });
     const tx = JSON.stringify(JSON.parse(proofTemplate(lock, text).stringify()), null, 2);
     setInput(tx);
-    setMine(true);
-    read(tx);
+    show(tx, true);
   };
 
   return (
@@ -78,47 +94,49 @@ export function ReadProof() {
           </button>
         </div>
       )}
-      {note && <p className="note bad">{note}</p>}
-      {fields && (
-        <div className="card">
-          <p className="ok">
-            <strong>✓ A request to prove a wallet{mine ? " (yours)" : ""}</strong>
-          </p>
-          <p className="small">Your wallet shows who is asking and the account, instead of a transaction:</p>
-          <p className="row">
-            <span className="small">Site</span>
-            <span>{fields.domain}</span>
-          </p>
-          <p className="row">
-            <span className="small">Account</span>
-            <span className="mono">{fields.account}</span>
-          </p>
-          <p className="row">
-            <span className="small">Wallet</span>
-            <span className="mono">{shortHash(fields.lockHash)}</span>
-          </p>
-          <p className="row">
-            <span className="small">Network</span>
-            <span className="mono">{shortHash(fields.chain)}</span>
-          </p>
-          <p className="row">
-            <span className="small">Time</span>
-            <span>{fields.issuedAt}</span>
-          </p>
-          <p className="row">
-            <span className="small">One-time code</span>
-            <span className="mono">{fields.nonce}</span>
-          </p>
-        </div>
-      )}
+      <div ref={resultRef}>
+        {note && <p className="note bad">{note}</p>}
+        {fields && (
+          <div className={`card${flash ? " flash" : ""}`}>
+            <p className="ok">
+              <strong>✓ A request to prove a wallet{mine ? " (yours)" : ""}</strong>
+            </p>
+            <p className="small">Your wallet shows who is asking and the account, instead of a transaction:</p>
+            <p className="row">
+              <span className="small">Site</span>
+              <span>{fields.domain}</span>
+            </p>
+            <p className="row">
+              <span className="small">Account</span>
+              <span className="mono">{fields.account}</span>
+            </p>
+            <p className="row">
+              <span className="small">Wallet</span>
+              <span className="mono">{shortHash(fields.lockHash)}</span>
+            </p>
+            <p className="row">
+              <span className="small">Network</span>
+              <span className="mono">{shortHash(fields.chain)}</span>
+            </p>
+            <p className="row">
+              <span className="small">Time</span>
+              <span>{fields.issuedAt}</span>
+            </p>
+            <p className="row">
+              <span className="small">One-time code</span>
+              <span className="mono">{fields.nonce}</span>
+            </p>
+          </div>
+        )}
+      </div>
       <details className="dev">
         <summary>See the raw request, or paste your own</summary>
-        <p className="small">This is the exact request a site sends. Your wallet turns it into the plain summary above.</p>
+        <p className="small">This is the exact request a site sends. Your wallet turns it into the plain summary above. Edit it and tap Read it.</p>
         <textarea className="mono" value={input} onChange={(e) => setInput(e.target.value)} rows={10} spellCheck={false} />
-        <button className="primary" onClick={() => (setMine(false), read(input))}>
+        <button className="primary" onClick={() => show(input, false)}>
           Read it
         </button>
-        <button className="link" onClick={() => (setInput(sample), setMine(false), read(sample))}>
+        <button className="link" onClick={() => (setInput(sample), show(sample, false))}>
           Reset to the example
         </button>
       </details>

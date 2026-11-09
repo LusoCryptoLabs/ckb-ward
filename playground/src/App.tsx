@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { NPM, REPO, SPEC, VOTE_DEMO, WalletControl, WalletProvider, type Net } from "./lib";
+import { LUSO, NPM, REPO, SPEC, VOTE_DEMO, WalletControl, WalletProvider, type Net } from "./lib";
 import { Prove } from "./examples/Prove";
 import { SignIn } from "./examples/SignIn";
 import { ReadProof } from "./examples/ReadProof";
@@ -43,10 +43,15 @@ const IconMessage = () => (
 );
 
 const EXAMPLES = [
-  { id: "prove", title: "Prove a wallet is yours", blurb: "Show a wallet belongs to you with one signature. Nothing is sent.", Icon: IconProve, Comp: Prove },
-  { id: "signin", title: "Sign in with a wallet", blurb: "Enter a site with your wallet, no password and no account.", Icon: IconSignIn, Comp: SignIn },
-  { id: "read", title: "What a wallet shows", blurb: "See what your wallet shows you when a site asks you to prove it.", Icon: IconRead, Comp: ReadProof },
-  { id: "message", title: "What you sign", blurb: "See exactly what your wallet is asked to sign, in plain text.", Icon: IconMessage, Comp: MessageTemplate },
+  { id: "prove", group: "how", title: "Prove a wallet is yours", blurb: "Show a wallet belongs to you with one signature. Nothing is sent.", Icon: IconProve, Comp: Prove },
+  { id: "read", group: "how", title: "What a wallet shows", blurb: "See what your wallet shows you when a site asks you to prove it.", Icon: IconRead, Comp: ReadProof },
+  { id: "message", group: "how", title: "What you sign", blurb: "See exactly what your wallet is asked to sign, in plain text.", Icon: IconMessage, Comp: MessageTemplate },
+  { id: "signin", group: "build", title: "Sign in with a wallet", blurb: "Enter a site with your wallet, no password and no account.", Icon: IconSignIn, Comp: SignIn },
+];
+
+const GROUPS = [
+  { key: "how", label: "How it works", blurb: "The building block, and what your wallet does with it." },
+  { key: "build", label: "What you can build", blurb: "Real things sites can do once a wallet is proven." },
 ];
 
 /** The Ward mark: the favicon's lettered cell. */
@@ -65,8 +70,8 @@ function Logo() {
 function Footer() {
   return (
     <footer className="small">
-      Ward is open source, and it is the CKB counterpart of Ethereum's EIP-1271 and Bitcoin's BIP-322. Read the <a href={SPEC}>spec</a>, the <a href={REPO}>code</a>, or the package on{" "}
-      <a href={NPM}>npm</a>. For a full platform built on it, see the <a href={VOTE_DEMO}>DAO voting demo</a>.
+      Ward is lock proof for CKB, by <a href={LUSO}>LusoCryptoLabs</a>. Open source: read the <a href={SPEC}>spec</a>, the <a href={REPO}>code</a>, or the package on <a href={NPM}>npm</a>. It is
+      the CKB counterpart of Ethereum's EIP-1271 and Bitcoin's BIP-322. For a full platform built on it, see the <a href={VOTE_DEMO}>DAO voting demo</a>.
     </footer>
   );
 }
@@ -88,7 +93,12 @@ export function App({ network, setNetwork }: { network: Net; setNetwork: (n: Net
       <div className="bg" aria-hidden="true" />
       <main>
         <nav className="site">
-          <Logo />
+          <span className="brandcol">
+            <Logo />
+            <a className="by" href={LUSO}>
+              by LusoCryptoLabs
+            </a>
+          </span>
           <div className="site-right">
             <div className="netswitch" role="group" aria-label="Network">
               {(["testnet", "mainnet"] as const).map((n) => (
@@ -132,18 +142,24 @@ export function App({ network, setNetwork }: { network: Net; setNetwork: (n: Net
                 prove what you hold, without moving anything. Try each piece below.
               </p>
             </header>
-            <div className="tiles">
-              {EXAMPLES.map((e) => (
-                <a key={e.id} className="tile" href={`#${e.id}`}>
-                  <span className="ico-badge">
-                    <e.Icon />
-                  </span>
-                  <h2>{e.title}</h2>
-                  <p>{e.blurb}</p>
-                  <span className="tile-go">Open →</span>
-                </a>
-              ))}
-            </div>
+            {GROUPS.map((g) => (
+              <section key={g.key} className="group">
+                <h2 className="group-title">{g.label}</h2>
+                <p className="small group-blurb">{g.blurb}</p>
+                <div className="tiles">
+                  {EXAMPLES.filter((e) => e.group === g.key).map((e) => (
+                    <a key={e.id} className="tile" href={`#${e.id}`}>
+                      <span className="ico-badge">
+                        <e.Icon />
+                      </span>
+                      <h2>{e.title}</h2>
+                      <p>{e.blurb}</p>
+                      <span className="tile-go">Open →</span>
+                    </a>
+                  ))}
+                </div>
+              </section>
+            ))}
           </>
         )}
 

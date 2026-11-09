@@ -5,6 +5,7 @@ export const REPO = "https://github.com/LusoCryptoLabs/ckb-ward";
 export const SPEC = `${REPO}/blob/main/docs/SPEC.md`;
 export const NPM = "https://www.npmjs.com/package/ckb-ward";
 export const VOTE_DEMO = "https://ward-demo.lusocryptolabs.com";
+export const LUSO = "https://lusocryptolabs.com";
 /** A proof request is good for 10 minutes on the server; fetch a new one before that. */
 const PREPARED_FOR_MS = 8 * 60_000;
 
