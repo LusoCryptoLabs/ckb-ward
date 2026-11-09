@@ -73,6 +73,8 @@ export type VerifyResult =
 
 /** Largest number of cell deps a proof may list (JoyID, the largest measured here, uses 5). */
 export const MAX_CELL_DEPS = 16;
+/** Largest number of header deps a proof may list. Most proofs list none; a header-reading lock a few. */
+export const MAX_HEADER_DEPS = 8;
 /**
  * Most cells all dep groups of a proof may list together, counted from the groups' data before any
  * member is read (the secp256k1 dep group, the largest measured here, lists 2).
@@ -209,14 +211,33 @@ export async function resolveCellDeps(rpcUrl: string, cellDeps: ccc.CellDepLike[
   return out;
 }
 
-/** The ckb-debugger mock for a one input proof transaction. */
-export function mockTransaction(tx: ccc.Transaction, input: MockCell, cellDeps: MockTransaction["mock_info"]["cell_deps"]): MockTransaction {
+/**
+ * Every header dep read live from the chain, by block hash, in the order listed, each read once.
+ * Never use header contents supplied by the prover. Throws NotLiveError when a header is unknown.
+ */
+export async function resolveHeaders(rpcUrl: string, headerDeps: ccc.HexLike[], rpcTimeoutMs?: number): Promise<unknown[]> {
+  const rpc = jsonRpc(rpcUrl, rpcTimeoutMs);
+  const seen = new Set<string>();
+  const out: unknown[] = [];
+  for (const dep of headerDeps) {
+    const hash = ccc.hexFrom(dep);
+    if (seen.has(hash)) continue;
+    seen.add(hash);
+    const header = await rpc("get_header", [hash]);
+    if (!header) throw new NotLiveError(`header dep ${hash} is not live (unknown)`);
+    out.push(header);
+  }
+  return out;
+}
+
+/** The ckb-debugger mock for a one input proof transaction. `headers` are the resolved header deps. */
+export function mockTransaction(tx: ccc.Transaction, input: MockCell, cellDeps: MockTransaction["mock_info"]["cell_deps"], headers: unknown[] = []): MockTransaction {
   const i = tx.inputs[0];
   return {
     mock_info: {
       inputs: [{ input: { since: ccc.numToHex(i.since), previous_output: JsonRpcTransformers.outPointFrom(i.previousOutput) }, ...input }],
       cell_deps: cellDeps,
-      header_deps: [],
+      header_deps: headers,
       extensions: [],
     },
     tx: JsonRpcTransformers.transactionFrom(tx),
@@ -259,15 +280,17 @@ function probeMessage(message: string): string {
 }
 
 /** The two probes of VerifyOptions.probes. Returns the reason to refuse, or undefined. */
-async function noExclusiveControl(lock: ccc.Script, message: string, tx: ccc.Transaction, deps: MockTransaction["mock_info"]["cell_deps"], runLock: RunLock) {
+async function noExclusiveControl(lock: ccc.Script, message: string, tx: ccc.Transaction, deps: MockTransaction["mock_info"]["cell_deps"], headers: unknown[], runLock: RunLock) {
   const empty = tx.clone();
   empty.witnesses = ["0x"];
-  const a = await runLock(mockTransaction(empty, proofInput(lock), deps));
+  const a = await runLock(mockTransaction(empty, proofInput(lock), deps, headers));
   if (a.code === 0) return { reason: "no exclusive control: the lock opens with an empty witness", run: a };
   const other = proofTemplate(lock, probeMessage(message));
   other.cellDeps = tx.cellDeps.map((d) => d.clone());
+  other.headerDeps = [...tx.headerDeps];
+  other.inputs[0].since = tx.inputs[0].since;
   other.witnesses = [...tx.witnesses];
-  const b = await runLock(mockTransaction(other, proofInput(lock), deps));
+  const b = await runLock(mockTransaction(other, proofInput(lock), deps, headers));
   if (b.code === 0) return { reason: "no exclusive control: the same witness opens another message", run: b };
   return undefined;
 }
@@ -300,11 +323,17 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
   if (tx.toBytes().length + 4 > MAX_TX_BYTES) return fail("transaction too large");
   if (ccc.bytesLen(tx.witnesses[0]) > (options.maxWitnessBytes ?? MAX_WITNESS_BYTES)) return fail("witness too large");
   if (tx.cellDeps.length > MAX_CELL_DEPS) return fail("too many cell deps");
+  if (tx.headerDeps.length > MAX_HEADER_DEPS) return fail("too many header deps");
   const twice = duplicateCellDep(tx.cellDeps);
   if (twice) return fail(`cell dep ${key(twice)} is listed twice`);
 
   const template = proofTemplate(lock, proof.message);
   template.cellDeps = tx.cellDeps.map((d) => d.clone());
+  // Cell deps, header deps and the input's since are the prover's to fill, like the witness: the
+  // verifier copies them from the submitted transaction, so they are not pinned by the hash check.
+  // The out point and the output stay pinned, so the proof still commits to the lock and message.
+  template.headerDeps = [...tx.headerDeps];
+  template.inputs[0].since = tx.inputs[0].since;
   if (template.hash() !== tx.hash()) return fail("not the proof template for this lock and message");
 
   // Every check above is free. From here on each step reads the chain or runs the lock.
@@ -313,15 +342,17 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
   if (chain !== (await rpc("get_block_hash", ["0x0"]))) return fail("the node is on another chain");
 
   let deps: MockTransaction["mock_info"]["cell_deps"];
+  let headers: unknown[];
   try {
     deps = await resolveCellDeps(options.rpcUrl, tx.cellDeps, { rpcTimeoutMs: options.rpcTimeoutMs });
+    headers = await resolveHeaders(options.rpcUrl, tx.headerDeps, options.rpcTimeoutMs);
   } catch (e) {
     if (e instanceof CellDepError) return fail(e.message);
     throw e;
   }
-  const run = await options.runLock(mockTransaction(tx, proofInput(lock), deps));
+  const run = await options.runLock(mockTransaction(tx, proofInput(lock), deps, headers));
   if (run.code === 0) {
-    const probe = options.probes === false ? undefined : await noExclusiveControl(lock, proof.message, tx, deps, options.runLock);
+    const probe = options.probes === false ? undefined : await noExclusiveControl(lock, proof.message, tx, deps, headers, options.runLock);
     if (probe) return fail(probe.reason, probe.run);
     const cellDeps = deps.map((d) => ccc.OutPoint.from({ txHash: d.cell_dep.out_point.tx_hash, index: d.cell_dep.out_point.index }));
     return { ok: true, fields, cycles: run.cycles, cellDeps };

@@ -15,7 +15,8 @@ export interface MockTransaction {
   mock_info: {
     inputs: (MockCell & { input: { since: string; previous_output: { tx_hash: string; index: string } } })[];
     cell_deps: (MockCell & { cell_dep: { out_point: { tx_hash: string; index: string }; dep_type: string } })[];
-    header_deps: [];
+    /** Resolved header views (JSON RPC format), for a lock that reads a header dep. Empty for most proofs. */
+    header_deps: unknown[];
     extensions: [];
   };
   tx: unknown;

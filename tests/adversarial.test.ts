@@ -16,11 +16,13 @@ const never: RunLock = async () => {
 const UNREACHABLE = "http://127.0.0.1:1/unreachable";
 const PINNED = "not the proof template for this lock and message";
 
-// One-field edits of a proof transaction, each of which must change the transaction hash.
+// One-field edits of a proof transaction, each of which the template pins: it changes the tx hash
+// and is refused as not the template. Cell deps, header deps, the input's since and the witness are
+// deliberately NOT here: the verifier copies them from the submitted transaction (see the tests
+// below), so a lock that reads them can run.
 const mutations: { name: string; edit: (tx: ccc.Transaction) => void }[] = [
   { name: "input out point tx hash", edit: (tx) => (tx.inputs[0].previousOutput.txHash = ccc.hexFrom(ccc.bytesFrom(tx.inputs[0].previousOutput.txHash).map((b, i) => (i === 0 ? b ^ 1 : b)))) },
   { name: "input index (not 0xffffffff)", edit: (tx) => (tx.inputs[0].previousOutput.index = 0n) },
-  { name: "input since", edit: (tx) => (tx.inputs[0].since = 1n) },
   { name: "a second input", edit: (tx) => tx.inputs.push(tx.inputs[0].clone()) },
   { name: "output capacity", edit: (tx) => (tx.outputs[0].capacity += 1n) },
   { name: "output lock args", edit: (tx) => (tx.outputs[0].lock.args = "0x01") },
@@ -29,7 +31,6 @@ const mutations: { name: string; edit: (tx: ccc.Transaction) => void }[] = [
   { name: "output data", edit: (tx) => (tx.outputsData[0] = "0x01") },
   { name: "a second output", edit: (tx) => (tx.outputs.push(tx.outputs[0].clone()), tx.outputsData.push("0x")) },
   { name: "version", edit: (tx) => (tx.version += 1n) },
-  { name: "a header dep", edit: (tx) => tx.headerDeps.push(ccc.hexFrom(new Uint8Array(32).fill(1))) },
 ];
 
 for (const v of vectors) {
@@ -76,17 +77,26 @@ test("earlier gates: witness count, cell dep count and duplicates", async () => 
   assert.equal(await reason(many), "too many cell deps");
 });
 
-// A witness change is expected NOT to be caught by the template gate (the hash does not cover it);
-// it passes the gate and reaches the chain. The lock, not the template, is what rejects a bad one.
-test("a changed witness is not pinned by the template (the lock rejects it instead)", async () => {
+// The witness, the input's since and header deps are deliberately not pinned: the verifier copies
+// the since and header deps from the submitted transaction, and the hash never covered the witness.
+// Each edit must pass the template gate and reach the chain (here, the unreachable node), so a lock
+// that reads them can run; it is not refused as "not the proof template".
+test("the witness, since and header deps are not pinned by the template", async () => {
   const v = vectors.find((x) => x.file === "secp256k1.json") ?? vectors[0];
-  const tx = ccc.Transaction.from(v.tx).clone();
-  const w = ccc.bytesFrom(tx.witnesses[0]).slice();
+  const opts = { rpcUrl: UNREACHABLE, runLock: never, expect: expectFor(v.message) };
+  const PAST_GATE = /fetch failed|ECONNREFUSED|other chain/;
+
+  const flipped = ccc.Transaction.from(v.tx).clone();
+  const w = ccc.bytesFrom(flipped.witnesses[0]).slice();
   w[v.signatureByte] ^= 0x01;
-  tx.witnesses[0] = ccc.hexFrom(w);
-  await assert.rejects(
-    verify({ lock: v.lock, message: v.message, tx }, { rpcUrl: UNREACHABLE, runLock: never, expect: expectFor(v.message) }),
-    /fetch failed|ECONNREFUSED|other chain/,
-    "a witness edit must pass the template gate (the signature is not hashed)",
-  );
+  flipped.witnesses[0] = ccc.hexFrom(w);
+  await assert.rejects(verify({ lock: v.lock, message: v.message, tx: flipped }, opts), PAST_GATE, "a witness edit passes the gate (the signature is not hashed)");
+
+  const sinceSet = ccc.Transaction.from(v.tx).clone();
+  sinceSet.inputs[0].since = 1n;
+  await assert.rejects(verify({ lock: v.lock, message: v.message, tx: sinceSet }, opts), PAST_GATE, "a since passes the gate (the verifier copies it)");
+
+  const headerDep = ccc.Transaction.from(v.tx).clone();
+  headerDep.headerDeps.push(ccc.hexFrom(new Uint8Array(32).fill(1)));
+  await assert.rejects(verify({ lock: v.lock, message: v.message, tx: headerDep }, opts), PAST_GATE, "a header dep passes the gate (the verifier copies it)");
 });

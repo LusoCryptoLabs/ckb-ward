@@ -1,10 +1,11 @@
 export { MAX_MESSAGE_BYTES, message, parseMessage, type MessageFields, type MessageInput } from "./message.ts";
-export { NULL_LOCK, PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG, proofOutPoint, proofTemplate, readProof } from "./template.ts";
+export { NULL_LOCK, PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG, proofOutPoint, proofTemplate, readProof, type ProofOptions } from "./template.ts";
 export {
   CLOCK_SKEW_SECONDS,
   CellDepError,
   MAX_CELL_DEPS,
   MAX_DEP_GROUP_MEMBERS,
+  MAX_HEADER_DEPS,
   MAX_TX_BYTES,
   MAX_WITNESS_BYTES,
   NotLiveError,
@@ -16,6 +17,7 @@ export {
   omnilockAdmin,
   proofInput,
   resolveCellDeps,
+  resolveHeaders,
   verify,
   type Expect,
   type Proof,
