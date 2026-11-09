@@ -5,6 +5,7 @@ import { SignIn } from "./examples/SignIn";
 import { ReadProof } from "./examples/ReadProof";
 import { MessageTemplate } from "./examples/MessageTemplate";
 import { TokenGate } from "./examples/TokenGate";
+import { Airdrop } from "./examples/Airdrop";
 
 /** A hexagon "cell" framing a glyph, the motif of the whole page. */
 function Cell({ children }: { children: ReactNode }) {
@@ -56,6 +57,12 @@ const IconVote = () => (
     <path d="M8 16v-3M12 16v-6M16 16v-2" />
   </Cell>
 );
+const IconAirdrop = () => (
+  <Cell>
+    <path d="M12 2l8.5 5v10L12 22 3.5 17V7z" />
+    <path d="M12 8v6M9 11.5l3 3 3-3" />
+  </Cell>
+);
 
 type Ex = { id: string; group: string; title: string; blurb: string; Icon: ComponentType; Comp?: ComponentType; href?: string };
 
@@ -65,6 +72,7 @@ const EXAMPLES: Ex[] = [
   { id: "message", group: "how", title: "What you sign", blurb: "See exactly what your wallet is asked to sign, in plain text.", Icon: IconMessage, Comp: MessageTemplate },
   { id: "signin", group: "build", title: "Sign in with a wallet", blurb: "Enter a site with your wallet, no password and no account.", Icon: IconSignIn, Comp: SignIn },
   { id: "gate", group: "build", title: "Members only", blurb: "Open a community, content, or a mint to wallets that hold enough.", Icon: IconGate, Comp: TokenGate },
+  { id: "airdrop", group: "build", title: "Airdrop check", blurb: "See if a wallet qualifies for an airdrop at a past snapshot.", Icon: IconAirdrop, Comp: Airdrop },
   { id: "vote", group: "build", title: "DAO voting", blurb: "Count any wallet's Nervos DAO deposit in a community vote.", Icon: IconVote, href: VOTE_DEMO },
 ];
 

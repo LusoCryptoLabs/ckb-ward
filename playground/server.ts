@@ -22,6 +22,9 @@ const MAX_AGE_SECONDS = 600;
 const SECURE_COOKIE = !/^localhost(:\d+)?$/.test(DOMAIN);
 /** The members-area example admits a wallet that holds at least this much CKB (in shannons). */
 const GATE_THRESHOLD = BigInt(process.env.GATE_CKB_SHANNONS ?? "10000000000");
+/** The airdrop example checks a Nervos DAO deposit at a fixed past block, per network. */
+const AIRDROP_SNAPSHOT: Record<"testnet" | "mainnet", number> = { testnet: 23000000, mainnet: 20960000 };
+const AIRDROP_MIN = BigInt(process.env.AIRDROP_MIN_SHANNONS ?? "100000000");
 
 type Net = "testnet" | "mainnet";
 const net = (n: unknown): Net => (n === "mainnet" ? "mainnet" : "testnet");
@@ -240,6 +243,17 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     if (!result.ok) return send(res, 400, { ok: false, reason: result.reason });
     const balance = await balanceOf(network, JSON.parse(row.lock));
     return send(res, 200, { ok: true, account: row.account, balance, threshold: GATE_THRESHOLD, admitted: balance >= GATE_THRESHOLD });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/airdrop") {
+    limit(req, "airdrop", 20);
+    const { nonce, tx } = await body(req);
+    const { row, network, result } = await checkProof(nonce, tx);
+    if (!result.ok) return send(res, 400, { ok: false, reason: result.reason });
+    const snapshot = AIRDROP_SNAPSHOT[network];
+    const w = await daoWeightAt(RPC[network], JSON.parse(row.lock), snapshot);
+    const deposit = w.weight;
+    return send(res, 200, { ok: true, account: row.account, snapshot, deposit, min: AIRDROP_MIN, eligible: deposit >= AIRDROP_MIN, allocation: deposit >= AIRDROP_MIN ? deposit : 0n });
   }
 
   if (req.method === "POST" && url.pathname === "/api/weight") {
