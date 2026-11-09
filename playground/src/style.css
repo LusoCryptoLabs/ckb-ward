@@ -84,6 +84,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 
 .site { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; padding: 6px 0 2px; flex-wrap: wrap; }
 .site-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.brandcol { display: inline-flex; flex-direction: column; gap: 1px; }
+.by { font-size: 0.72rem; color: var(--muted); text-decoration: none; letter-spacing: 0.02em; }
+.by:hover { color: var(--accent); text-decoration: underline; }
 .wc-connect { min-height: 0; padding: 5px 12px; font-size: 0.92rem; box-shadow: 2px 2px 0 var(--btn-shadow); }
 .wc-connect:hover { box-shadow: 3px 3px 0 var(--btn-shadow); }
 .wc { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; }
@@ -103,7 +106,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .hero .lead { max-width: 540px; margin: 0 auto; font-size: 1.02rem; }
 .lead { color: var(--muted); margin: 0 0 6px; }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 26px 0; }
+.group { margin: 26px 0; }
+.group-title { font-family: var(--display); font-weight: 400; font-size: 1.7rem; margin: 0 0 2px; letter-spacing: 0.01em; }
+.group-blurb { margin: 0 0 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 0; }
 .tile {
   position: relative; display: flex; flex-direction: column; gap: 8px;
   background: var(--card); border: 2px solid var(--line); border-radius: 3px; padding: 18px;
@@ -200,6 +206,8 @@ pre.shows.template { max-height: 340px; overflow: auto; word-break: normal; }
 
 .dev-note { border-left: 2px solid var(--line); padding-left: 10px; margin: 2px 0 10px; }
 .try { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 2px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: 3px; padding: 8px 12px; margin: 10px 0 0; font-size: 0.92rem; }
+.card.flash { animation: flash 0.9s ease; }
+@keyframes flash { 0% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
 .dev { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 6px; }
 .dev summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 0.85rem; padding: 2px 0; }
 .dev p { margin: 6px 0; }
