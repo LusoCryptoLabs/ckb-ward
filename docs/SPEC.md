@@ -64,8 +64,8 @@ n   = byte length of the message
 | --- | --- |
 | version | 0 |
 | cell_deps | whatever the lock needs, chosen by the wallet |
-| header_deps | empty |
-| inputs | exactly one: `previous_output = { tx_hash: P, index: 0xffffffff }`, `since = 0` |
+| header_deps | whatever a header-reading lock needs, usually none, chosen by the wallet |
+| inputs | exactly one: `previous_output = { tx_hash: P, index: 0xffffffff }`, `since = 0`, or a value the wallet sets to satisfy a matured absolute time lock |
 | outputs | exactly one: `capacity = (41 + n) * 10^8` shannons, `lock = { code_hash: 0x00 * 32, hash_type: "data", args: 0x }`, no type |
 | outputs_data | exactly one: the message bytes |
 | witnesses | exactly one: what the lock needs, as the wallet writes it (usually a `WitnessArgs` with the signature in `lock`) |
@@ -92,12 +92,12 @@ Input: the claimed lock L, the message M, the signed transaction T, and the plat
 3. Refuse unless M equals E's message byte for byte.
 4. Refuse unless the lock hash line equals the lock hash of L. Refuse when L is an Omnilock with the administrator flag (section 6, rule 6).
 5. Refuse unless the domain, account, nonce and chain lines equal E's, `now - issued at` is within E's window, and `issued at` is not more than 60 seconds ahead of `now`.
-6. Refuse unless T has exactly one witness, T's serialized size in a block (its bytes plus 4) is at most 597,000, the witness is at most 65,536 bytes, T lists at most 16 cell deps, and no out point appears twice among them (section 7).
-7. Build the template of section 4 from (L, M) and copy T's cell deps into it. Refuse unless its transaction hash equals T's. The transaction hash covers every field but the witnesses, so this one comparison checks every value in section 4.
+6. Refuse unless T has exactly one witness, T's serialized size in a block (its bytes plus 4) is at most 597,000, the witness is at most 65,536 bytes, T lists at most 16 cell deps with no out point twice, and at most 8 header deps (section 7).
+7. Build the template of section 4 from (L, M), copy T's cell deps, header deps and the input's `since` into it, and refuse unless its transaction hash equals T's. The transaction hash covers every field but the witnesses, so this one comparison checks every value in section 4. Cell deps, header deps and `since` are the prover's to set, like the witness: they let a lock that reads them run, and cannot forge control, since the out point and the output stay pinned (rule 2) and the signature over the hash is still required.
 8. Claim the nonce (section 9, rule 3). Refuse when it was already used.
 9. Refuse unless the node's genesis hash (`get_block_hash(0)`) equals E's chain.
-10. Read every cell dep of T from the node as a live cell with data. For each dep group, read the member count from its data (an `OutPointVec`: a 4 byte count, then 36 bytes per out point). Refuse when the data is not that shape, or when all groups together list more than 32 cells, before reading any member. Then read each member not already read, as a live cell. Refuse when any cell is not live. Each read has a timeout.
-11. Run the lock script group of input 0 in CKB-VM with T, the resolved input and the resolved deps, under a cycle limit. Refuse unless the lock exits 0.
+10. Read every cell dep of T from the node as a live cell with data. For each dep group, read the member count from its data (an `OutPointVec`: a 4 byte count, then 36 bytes per out point). Refuse when the data is not that shape, or when all groups together list more than 32 cells, before reading any member. Then read each member not already read, as a live cell. Refuse when any cell is not live. Read each header dep of T live from the node, by block hash, each hash once; refuse when a header is unknown. Each read has a timeout.
+11. Run the lock script group of input 0 in CKB-VM with T, the resolved input, the resolved deps and the resolved headers, under a cycle limit. Refuse unless the lock exits 0.
 12. Probe for exclusive control (section 6, rule 4). Run the lock again on (a) T with its witness replaced by an empty one, and (b) the template of M', which is M with the nonce replaced by a fresh random value, with T's cell deps and T's witness. Refuse when either exits 0.
 13. Accept, and return the out points read in step 10. The binding records them (section 9, rule 8).
 
@@ -107,7 +107,7 @@ Each rule was found while building or reviewing this. A verifier that breaks one
 
 **Rule 1: cell deps come from the chain as live cells, never from the prover.** A lock's behaviour depends on its deps. For a lock with `hash_type` type, the code is found by type script hash, so a forged dep can carry any code. Some locks also read settings from deps. Measured with the Cellula smart-account lock, whose guarded form reads its authenticators from a Config Cell given as a cell dep: a proof signed by a key that is not an authenticator, sent with a forged copy of the Config Cell that lists that key, is **accepted** by the lock (exit 0) when the verifier uses the prover's copy. Read from the chain, the forged out point is not live and the proof is refused (vector V4, `forgedConfig`).
 
-**Rule 2: the verifier builds the template.** If the verifier took any transaction whose input 0 is under L, the prover could add inputs, outputs or header deps that make L accept without the owner's key. Owner-lock style locks accept when another input carries a given lock hash. Proxy-lock style locks accept when a given cell is present. The anyone-can-pay lock accepts without a signature when an output under the same lock receives more. The template allows one input, one output and no header deps, so none of these paths opens. Measured with the anyone-can-pay lock (vector V6): with no signature it refuses the template (exit -44, no output to pair the input with), and it accepts the same empty witness (exit 0) on a transaction whose only output is under the same lock and receives the input's whole capacity, which the template check refuses. The owner-lock and proxy-lock attacks are reasoning, not measured here.
+**Rule 2: the verifier builds the template.** If the verifier took any transaction whose input 0 is under L, the prover could add inputs or outputs that make L accept without the owner's key. Owner-lock style locks accept when another input carries a given lock hash. Proxy-lock style locks accept when a given cell is present. The anyone-can-pay lock accepts without a signature when an output under the same lock receives more. The template pins one input and one output, so none of these paths opens. Cell deps, header deps and the input's `since` are the prover's to set (section 5, step 7): they let a lock that reads them run, but add no input or output, so they open none of these paths. Measured with the anyone-can-pay lock (vector V6): with no signature it refuses the template (exit -44, no output to pair the input with), and it accepts the same empty witness (exit 0) on a transaction whose only output is under the same lock and receives the input's whole capacity, which the template check refuses. The owner-lock and proxy-lock attacks are reasoning, not measured here.
 
 **Rule 3: the input is a constant of the verifier, at u64::MAX.** Never a cell the prover names, and never a smaller capacity: a lock that caps what a key may move must see the whole account leave (section 4).
 
@@ -187,10 +187,9 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 
 ## 12. Not covered
 
-- **Locks with a time condition.** The template has since 0. Measured: an Omnilock in time-lock mode refuses it (exit -24), so such a lock cannot be proven with this template.
+- **Relative or not-yet-matured time conditions.** The wallet can set the input's since to satisfy a matured absolute time lock, and the verifier runs the lock with it (measured: a since-gated lock refuses since 0 and accepts a satisfying since). A relative since has nothing to anchor to, as the input is fabricated. And the proof runs with the since the wallet sets, not the chain's time, so it shows the key controls the lock, not that an absolute time has passed: a platform that depends on the time must check it itself.
 - **Locks whose signature does not cover the transaction hash.** Probe (b) refuses a witness that opens another message; a lock that signs something else could still pass it.
-- **Locks that read header deps.** The template has none, so the result can differ from a real spend.
-- **Locks that read the input's capacity.** They see u64::MAX. A lock that adds it to another amount could overflow and refuse an honest proof.
+- **Locks that read the input's capacity.** They see u64::MAX. A lock that adds it to another amount could overflow. Lowering it to 2^63 would keep the capped-key guarantee with room to spare, but the quantum-resistant lock signs over the input cells, so changing the capacity would invalidate every such proof (measured: exit 107); it stays at u64::MAX.
 - **Locks that need more than one input or more than one witness**, such as an owner lock that needs the owner's cell as a second input.
 - **Type scripts.** Never run. The proof is about the lock only.
 - **Mainnet.** V9 (secp256k1, 2026-11-05), V11 (JoyID, signed 2026-11-04), V16 (PW-lock) and V17 (the quantum-resistant lock, both 2026-11-06) are replayed by the tests against mainnet's cell deps, under ckb-debugger and under `ward-vm` with mainnet's consensus. The JoyID app on mainnet only accepts a requesting page served over https.

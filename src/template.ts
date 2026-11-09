@@ -28,20 +28,36 @@ export function proofOutPoint(lock: ccc.ScriptLike, message: string): ccc.OutPoi
 }
 
 /**
+ * Options for a lock that needs more than a plain signature over the transaction hash. Both default
+ * to the plain proof (since 0, no header deps) and are not pinned by the verifier: like cell deps,
+ * the verifier copies them from the submitted transaction before the template check and resolves the
+ * header deps live. A lock that reads them (a matured absolute time lock, a header-reading lock) can
+ * then be proven; they cannot forge control, since the signature over the transaction hash is still
+ * required and the "no exclusive control" probes still run.
+ */
+export interface ProofOptions {
+  /** The input's `since`. Set it to satisfy a matured absolute time lock (section 12). */
+  since?: ccc.NumLike;
+  /** Block hashes a header-reading lock needs. The verifier reads the headers live (section 12). */
+  headerDeps?: ccc.HexLike[];
+}
+
+/**
  * The proof transaction: one input at an out point that cannot exist, one output under NULL_LOCK
  * holding the message. Cell deps and witnesses are the wallet's to fill. The input carries the cell
  * the verifier resolves it to (capacity u64::MAX, the lock, no type, no data), so signers can
- * compute the sighash without the chain and see what the lock will see.
+ * compute the sighash without the chain and see what the lock will see. `opts` carries a since or
+ * header deps for the locks that need them.
  */
-export function proofTemplate(lock: ccc.ScriptLike, message: string): ccc.Transaction {
+export function proofTemplate(lock: ccc.ScriptLike, message: string, opts: ProofOptions = {}): ccc.Transaction {
   const script = ccc.Script.from(lock);
   const data = utf8(message);
   const capacity = BigInt(8 + NULL_LOCK.occupiedSize + data.length) * SHANNONS;
   return ccc.Transaction.from({
     version: 0,
     cellDeps: [],
-    headerDeps: [],
-    inputs: [{ previousOutput: proofOutPoint(script, message), since: 0, cellOutput: { capacity: PROOF_INPUT_CAPACITY, lock: script }, outputData: "0x" }],
+    headerDeps: opts.headerDeps ?? [],
+    inputs: [{ previousOutput: proofOutPoint(script, message), since: opts.since ?? 0, cellOutput: { capacity: PROOF_INPUT_CAPACITY, lock: script }, outputData: "0x" }],
     outputs: [{ capacity, lock: NULL_LOCK }],
     outputsData: [ccc.hexFrom(data)],
     witnesses: [],
@@ -63,6 +79,8 @@ export function readProof(tx: ccc.TransactionLike, lock: ccc.ScriptLike): Messag
     const text = new TextDecoder("utf-8", { fatal: true }).decode(ccc.bytesFrom(t.outputsData[0]));
     const tpl = proofTemplate(lock, text);
     tpl.cellDeps = t.cellDeps.map((d) => d.clone());
+    tpl.headerDeps = [...t.headerDeps];
+    tpl.inputs[0].since = t.inputs[0].since;
     if (tpl.hash() !== t.hash()) return undefined;
     return parseMessage(text);
   } catch {

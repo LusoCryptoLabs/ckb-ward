@@ -3,13 +3,17 @@
 // that opens with a fixed witness (like a hash lock whose preimage is public), and locks that
 // print through the debug syscall before they exit or crash.
 
-const ZERO = 0, SP = 2, T0 = 5, T1 = 6, A0 = 10, A1 = 11, A2 = 12, A3 = 13, A4 = 14, A7 = 17;
+const ZERO = 0, SP = 2, T0 = 5, T1 = 6, A0 = 10, A1 = 11, A2 = 12, A3 = 13, A4 = 14, A5 = 15, A7 = 17;
 const SYS_EXIT = 93;
 const SYS_LOAD_WITNESS = 2074;
+const SYS_LOAD_INPUT_BY_FIELD = 2073;
+const SYS_LOAD_HEADER = 2072;
 const SYS_DEBUG = 2177;
 const SOURCE_INPUT = 1;
+const SOURCE_HEADER_DEP = 4;
+const FIELD_SINCE = 0;
 
-type Item = number | { label: string } | { op: "bne"; rs1: number; rs2: number; to: string } | { op: "jal"; to: string };
+type Item = number | { label: string } | { op: "bne" | "bltu"; rs1: number; rs2: number; to: string } | { op: "jal"; to: string };
 
 const iType = (opcode: number, f3: number, rd: number, rs1: number, imm: number) => (((imm & 0xfff) << 20) | (rs1 << 15) | (f3 << 12) | (rd << 7) | opcode) >>> 0;
 const addi = (rd: number, rs1: number, imm: number) => iType(0x13, 0, rd, rs1, imm);
@@ -24,6 +28,8 @@ const ILLEGAL = 0x00000000;
 
 const bne = (rs1: number, rs2: number, off: number) =>
   ((((off >> 12) & 1) << 31) | (((off >> 5) & 0x3f) << 25) | (rs2 << 20) | (rs1 << 15) | (1 << 12) | (((off >> 1) & 0xf) << 8) | (((off >> 11) & 1) << 7) | 0x63) >>> 0;
+const bltu = (rs1: number, rs2: number, off: number) =>
+  ((((off >> 12) & 1) << 31) | (((off >> 5) & 0x3f) << 25) | (rs2 << 20) | (rs1 << 15) | (6 << 12) | (((off >> 1) & 0xf) << 8) | (((off >> 11) & 1) << 7) | 0x63) >>> 0;
 const jal = (rd: number, off: number) =>
   ((((off >> 20) & 1) << 31) | (((off >> 1) & 0x3ff) << 21) | (((off >> 11) & 1) << 20) | (((off >> 12) & 0xff) << 12) | (rd << 7) | 0x6f) >>> 0;
 
@@ -46,7 +52,7 @@ function assemble(items: Item[]): Uint8Array {
     if (typeof it === "number") words.push(it);
     else if ("op" in it) {
       const off = labels.get(it.to)! - words.length * 4;
-      words.push(it.op === "bne" ? bne(it.rs1, it.rs2, off) : jal(ZERO, off));
+      words.push(it.op === "jal" ? jal(ZERO, off) : it.op === "bltu" ? bltu(it.rs1, it.rs2, off) : bne(it.rs1, it.rs2, off));
     }
   }
   const out = new Uint8Array(words.length * 4);
@@ -146,6 +152,63 @@ export function password(word: string): Uint8Array {
       ...exit(2),
       { label: "fail3" },
       ...exit(3),
+    ]),
+  );
+}
+
+/**
+ * Exits 0 when input 0's since (u64 little-endian) is >= `min`, else 24; 11 if the syscall fails.
+ * Stands in for a lock with an absolute time condition, to show the verifier can carry a satisfying
+ * since. Like a hash lock, it reads no signature, so the probes refuse it on its own.
+ */
+export function sinceLock(min: number): Uint8Array {
+  return elf(
+    assemble([
+      addi(SP, SP, -80),
+      ...li(T0, 8),
+      sd(T0, SP, 0),
+      addi(A0, SP, 8),
+      addi(A1, SP, 0),
+      ...li(A2, 0),
+      ...li(A3, 0),
+      ...li(A4, SOURCE_INPUT),
+      ...li(A5, FIELD_SINCE),
+      ...li(A7, SYS_LOAD_INPUT_BY_FIELD),
+      ECALL,
+      { op: "bne", rs1: A0, rs2: ZERO, to: "fail_syscall" },
+      ld(T0, SP, 8),
+      ...li(T1, min),
+      { op: "bltu", rs1: T0, rs2: T1, to: "fail_since" },
+      ...exit(0),
+      { label: "fail_syscall" },
+      ...exit(11),
+      { label: "fail_since" },
+      ...exit(24),
+    ]),
+  );
+}
+
+/**
+ * Exits 0 when header dep 0 loads, else 7. Stands in for a lock that reads a header, to show the
+ * verifier can carry and resolve header deps. Reads no signature, so the probes refuse it on its own.
+ */
+export function headerLock(): Uint8Array {
+  return elf(
+    assemble([
+      addi(SP, SP, -240),
+      ...li(T0, 208),
+      sd(T0, SP, 0),
+      addi(A0, SP, 8),
+      addi(A1, SP, 0),
+      ...li(A2, 0),
+      ...li(A3, 0),
+      ...li(A4, SOURCE_HEADER_DEP),
+      ...li(A7, SYS_LOAD_HEADER),
+      ECALL,
+      { op: "bne", rs1: A0, rs2: ZERO, to: "fail" },
+      ...exit(0),
+      { label: "fail" },
+      ...exit(7),
     ]),
   );
 }
