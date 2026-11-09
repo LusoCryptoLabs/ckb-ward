@@ -163,7 +163,7 @@ The vectors depend on testnet cell deps staying live.
 
 Prototype, on npm as `ckb-ward`. Vectors are from testnet, and two from mainnet. The spec is a v1 draft and may change.
 
-Known gaps are listed in section 12 of the spec: locks with a time condition, or whose signature does not cover the transaction hash, are not covered.
+A proof can carry a `since` and header deps for the locks that need them, so a matured absolute time lock or a header-reading lock can be proven. Known gaps are in section 12 of the spec: relative or not-yet-matured time conditions, and locks whose signature does not cover the transaction hash.
 
 ## License
 
