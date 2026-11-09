@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { LUSO, NPM, REPO, SPEC, VOTE_DEMO, WalletControl, WalletProvider, type Net } from "./lib";
 import { Prove } from "./examples/Prove";
 import { SignIn } from "./examples/SignIn";
 import { ReadProof } from "./examples/ReadProof";
 import { MessageTemplate } from "./examples/MessageTemplate";
+import { TokenGate } from "./examples/TokenGate";
 
 /** A hexagon "cell" framing a glyph, the motif of the whole page. */
 function Cell({ children }: { children: ReactNode }) {
@@ -42,11 +43,29 @@ const IconMessage = () => (
   </Cell>
 );
 
-const EXAMPLES = [
+const IconGate = () => (
+  <Cell>
+    <path d="M12 2l8.5 5v10L12 22 3.5 17V7z" />
+    <rect x="8.5" y="11" width="7" height="5.5" rx="1" />
+    <path d="M9.9 11V9.6a2.1 2.1 0 0 1 4.2 0V11" />
+  </Cell>
+);
+const IconVote = () => (
+  <Cell>
+    <path d="M12 2l8.5 5v10L12 22 3.5 17V7z" />
+    <path d="M8 16v-3M12 16v-6M16 16v-2" />
+  </Cell>
+);
+
+type Ex = { id: string; group: string; title: string; blurb: string; Icon: ComponentType; Comp?: ComponentType; href?: string };
+
+const EXAMPLES: Ex[] = [
   { id: "prove", group: "how", title: "Prove a wallet is yours", blurb: "Show a wallet belongs to you with one signature. Nothing is sent.", Icon: IconProve, Comp: Prove },
   { id: "read", group: "how", title: "What a wallet shows", blurb: "See what your wallet shows you when a site asks you to prove it.", Icon: IconRead, Comp: ReadProof },
   { id: "message", group: "how", title: "What you sign", blurb: "See exactly what your wallet is asked to sign, in plain text.", Icon: IconMessage, Comp: MessageTemplate },
   { id: "signin", group: "build", title: "Sign in with a wallet", blurb: "Enter a site with your wallet, no password and no account.", Icon: IconSignIn, Comp: SignIn },
+  { id: "gate", group: "build", title: "Members only", blurb: "Open a community, content, or a mint to wallets that hold enough.", Icon: IconGate, Comp: TokenGate },
+  { id: "vote", group: "build", title: "DAO voting", blurb: "Count any wallet's Nervos DAO deposit in a community vote.", Icon: IconVote, href: VOTE_DEMO },
 ];
 
 const GROUPS = [
@@ -86,7 +105,8 @@ export function App({ network, setNetwork }: { network: Net; setNetwork: (n: Net
     window.addEventListener("hashchange", f);
     return () => window.removeEventListener("hashchange", f);
   }, []);
-  const current = EXAMPLES.find((e) => e.id === active);
+  const current = EXAMPLES.find((e) => e.id === active && e.Comp);
+  const Current = current?.Comp;
 
   return (
     <WalletProvider network={network}>
@@ -118,7 +138,7 @@ export function App({ network, setNetwork }: { network: Net; setNetwork: (n: Net
           </div>
         </nav>
 
-        {current ? (
+        {current && Current ? (
           <section className="ex">
             <a className="back" href="#">
               ← All examples
@@ -129,7 +149,7 @@ export function App({ network, setNetwork }: { network: Net; setNetwork: (n: Net
               </span>
               {current.title}
             </h1>
-            <current.Comp />
+            <Current />
           </section>
         ) : (
           <>
@@ -148,13 +168,13 @@ export function App({ network, setNetwork }: { network: Net; setNetwork: (n: Net
                 <p className="small group-blurb">{g.blurb}</p>
                 <div className="tiles">
                   {EXAMPLES.filter((e) => e.group === g.key).map((e) => (
-                    <a key={e.id} className="tile" href={`#${e.id}`}>
+                    <a key={e.id} className="tile" href={e.href ?? `#${e.id}`} {...(e.href ? { target: "_blank", rel: "noreferrer" } : {})}>
                       <span className="ico-badge">
                         <e.Icon />
                       </span>
                       <h2>{e.title}</h2>
                       <p>{e.blurb}</p>
-                      <span className="tile-go">Open →</span>
+                      <span className="tile-go">{e.href ? "Open demo ↗" : "Open →"}</span>
                     </a>
                   ))}
                 </div>

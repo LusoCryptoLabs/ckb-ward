@@ -20,6 +20,8 @@ const STATIC_DIR = fileURLToPath(new URL("./dist/", import.meta.url));
 const MAX_BODY = 64 * 1024;
 const MAX_AGE_SECONDS = 600;
 const SECURE_COOKIE = !/^localhost(:\d+)?$/.test(DOMAIN);
+/** The members-area example admits a wallet that holds at least this much CKB (in shannons). */
+const GATE_THRESHOLD = BigInt(process.env.GATE_CKB_SHANNONS ?? "10000000000");
 
 type Net = "testnet" | "mainnet";
 const net = (n: unknown): Net => (n === "mainnet" ? "mainnet" : "testnet");
@@ -168,6 +170,21 @@ function serialProof(r: Awaited<ReturnType<typeof verify>>) {
   return { ok: true as const, fields: r.fields, cycles: r.cycles, cellDeps: r.cellDeps.map((o) => ({ txHash: o.txHash, index: Number(o.index) })) };
 }
 
+/** Total CKB (shannons) in live cells under a lock, from the node's indexer. */
+async function balanceOf(n: Net, lockLike: ccc.ScriptLike): Promise<bigint> {
+  const lock = ccc.Script.from(lockLike);
+  const key = { script: { code_hash: lock.codeHash, hash_type: lock.hashType, args: lock.args }, script_type: "lock" };
+  let sum = 0n;
+  let cursor: string | undefined;
+  for (let page = 0; page < 20; page++) {
+    const r: any = await rpcs[n]("get_cells", [key, "asc", "0x3e8", cursor ?? null]);
+    for (const c of r.objects) sum += BigInt(c.output.capacity);
+    if (!r.last_cursor || r.last_cursor === "0x" || r.objects.length < 1000) break;
+    cursor = r.last_cursor;
+  }
+  return sum;
+}
+
 // --- routes ------------------------------------------------------------------------------------
 
 async function route(req: IncomingMessage, res: ServerResponse) {
@@ -214,6 +231,15 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     return send(res, 200, { ...serialProof(result), account: row.account, lockHash: row.lock_hash, network }, {
       "set-cookie": `ward_play=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${SECURE_COOKIE ? "; Secure" : ""}`,
     });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/gate") {
+    limit(req, "gate", 20);
+    const { nonce, tx } = await body(req);
+    const { row, network, result } = await checkProof(nonce, tx);
+    if (!result.ok) return send(res, 400, { ok: false, reason: result.reason });
+    const balance = await balanceOf(network, JSON.parse(row.lock));
+    return send(res, 200, { ok: true, account: row.account, balance, threshold: GATE_THRESHOLD, admitted: balance >= GATE_THRESHOLD });
   }
 
   if (req.method === "POST" && url.pathname === "/api/weight") {
