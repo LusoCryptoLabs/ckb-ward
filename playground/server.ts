@@ -11,7 +11,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { ccc } from "@ckb-ccc/core";
-import { daoWeightAt, jsonRpc, message, proofTemplate, tipEpoch, verify, wardVm } from "../src/index.ts";
+import { daoWeightAt, depsLiveAt, jsonRpc, message, proofTemplate, tipEpoch, verify, wardVm } from "../src/index.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DOMAIN = process.env.DOMAIN ?? "ward-play.lusocryptolabs.com";
