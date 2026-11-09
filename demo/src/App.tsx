@@ -376,12 +376,26 @@ export function App() {
   const moving = !!lockBound && lockBound.account !== account;
 
   return (
-    <main>
-      <header>
-        <p className="tag">Testnet demo · no real money</p>
-        <h1>Vote with your Nervos DAO deposit, from any wallet</h1>
-        <p className="lead">Prove a wallet is yours with one signature, then vote. The CKB you have in the Nervos DAO decides how much your vote counts. Nothing is sent.</p>
-      </header>
+    <>
+      <div className="bg" aria-hidden="true" />
+      <main>
+        <nav className="site">
+          <span className="brandcol">
+            <a className="brand" href="https://ward-play.lusocryptolabs.com">
+              <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+                <path d="M16 2l12 7v14l-12 7L4 23V9z" className="brand-cell" />
+                <path d="M10 11l3 10 3-7 3 7 3-10" className="brand-w" fill="none" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+              </svg>
+              <span>Ward</span>
+            </a>
+            <a className="by" href="https://lusocryptolabs.com">by LusoCryptoLabs</a>
+          </span>
+          <span className="tag">Testnet · no real money</span>
+        </nav>
+        <header>
+          <h1>Vote with your Nervos DAO deposit, from any wallet</h1>
+          <p className="lead">Prove a wallet is yours with one signature, then vote. The CKB you have in the Nervos DAO decides how much your vote counts. Nothing is sent.</p>
+        </header>
 
       <section className={`clock ${voting ? "vote" : "bind"}`} aria-live="polite">
         {state ? (
@@ -673,6 +687,10 @@ export function App() {
           <a href={`${REPO}/tree/main/demo`}>source code</a> is open.
         </p>
       </details>
-    </main>
+      <p className="credit">
+        Ward, lock proof for CKB, by <a href="https://lusocryptolabs.com">LusoCryptoLabs</a>. Try each piece in the <a href="https://ward-play.lusocryptolabs.com">playground</a>.
+      </p>
+      </main>
+    </>
   );
 }
