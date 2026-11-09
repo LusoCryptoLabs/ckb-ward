@@ -256,6 +256,15 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     return send(res, 200, { ok: true, account: row.account, snapshot, deposit, min: AIRDROP_MIN, eligible: deposit >= AIRDROP_MIN, allocation: deposit >= AIRDROP_MIN ? deposit : 0n });
   }
 
+  if (req.method === "POST" && url.pathname === "/api/balance") {
+    limit(req, "balance", 30);
+    const { nonce, tx } = await body(req);
+    const { row, network, result } = await checkProof(nonce, tx);
+    if (!result.ok) return send(res, 400, { ok: false, reason: result.reason });
+    const balance = await balanceOf(network, JSON.parse(row.lock));
+    return send(res, 200, { ok: true, account: row.account, lockHash: row.lock_hash, balance });
+  }
+
   if (req.method === "POST" && url.pathname === "/api/weight") {
     limit(req, "weight", 20);
     const { lock, network } = await body(req);
