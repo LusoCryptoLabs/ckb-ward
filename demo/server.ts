@@ -204,6 +204,13 @@ function serveStatic(req: IncomingMessage, res: ServerResponse) {
 
 async function route(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? "/", "http://x");
+
+  // The DAO voting demo moved into the Ward playground. Send every page to its example there.
+  if (req.method === "GET" && !url.pathname.startsWith("/api/")) {
+    res.writeHead(302, { location: "https://ward-play.lusocryptolabs.com/#vote" });
+    return res.end();
+  }
+
   const me = cookieAccount(req);
 
   if (req.method === "GET" && url.pathname === "/api/state") {

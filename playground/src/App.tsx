@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
-import { LUSO, NPM, REPO, SPEC, VOTE_DEMO, WalletControl, WalletProvider, type Net } from "./lib";
+import { LUSO, NPM, REPO, SPEC, WalletControl, WalletProvider, type Net } from "./lib";
 import { Prove } from "./examples/Prove";
 import { SignIn } from "./examples/SignIn";
 import { ReadProof } from "./examples/ReadProof";
@@ -7,6 +7,7 @@ import { MessageTemplate } from "./examples/MessageTemplate";
 import { TokenGate } from "./examples/TokenGate";
 import { Airdrop } from "./examples/Airdrop";
 import { Reserves } from "./examples/Reserves";
+import { Voting } from "./examples/Voting";
 
 /** A hexagon "cell" framing a glyph, the motif of the whole page. */
 function Cell({ children }: { children: ReactNode }) {
@@ -81,7 +82,7 @@ const EXAMPLES: Ex[] = [
   { id: "gate", group: "build", title: "Members only", blurb: "Open a community, content, or a mint to wallets that hold enough.", Icon: IconGate, Comp: TokenGate },
   { id: "airdrop", group: "build", title: "Airdrop check", blurb: "See if a wallet qualifies for an airdrop at a past snapshot.", Icon: IconAirdrop, Comp: Airdrop },
   { id: "reserves", group: "build", title: "Proof of reserves", blurb: "Prove several addresses and add up the CKB you can prove.", Icon: IconReserves, Comp: Reserves },
-  { id: "vote", group: "build", title: "DAO voting", blurb: "Count any wallet's Nervos DAO deposit in a community vote.", Icon: IconVote, href: VOTE_DEMO },
+  { id: "vote", group: "build", title: "DAO voting", blurb: "Count any wallet's Nervos DAO deposit in a community vote.", Icon: IconVote, Comp: Voting },
 ];
 
 const GROUPS = [
@@ -106,7 +107,7 @@ function Footer() {
   return (
     <footer className="small">
       Ward is lock proof for CKB, by <a href={LUSO}>LusoCryptoLabs</a>. Open source: read the <a href={SPEC}>spec</a>, the <a href={REPO}>code</a>, or the package on <a href={NPM}>npm</a>. It is
-      the CKB counterpart of Ethereum's EIP-1271 and Bitcoin's BIP-322. For a full platform built on it, see the <a href={VOTE_DEMO}>DAO voting demo</a>.
+      the CKB counterpart of Ethereum's EIP-1271 and Bitcoin's BIP-322.
     </footer>
   );
 }

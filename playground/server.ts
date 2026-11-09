@@ -26,6 +26,16 @@ const GATE_THRESHOLD = BigInt(process.env.GATE_CKB_SHANNONS ?? "10000000000");
 const AIRDROP_SNAPSHOT: Record<"testnet" | "mainnet", number> = { testnet: 23000000, mainnet: 20960000 };
 const AIRDROP_MIN = BigInt(process.env.AIRDROP_MIN_SHANNONS ?? "100000000");
 
+// --- DAO voting example: a stateful poll in cycles, testnet only (the full platform of the spec's
+// rules 1-10). Binding is open for the first part of each cycle, then a vote opens with its snapshot
+// at the tip and binding freezes until it closes.
+const VOTE_NET: Net = "testnet";
+const CYCLE_MS = Number(process.env.VOTE_CYCLE_MS ?? 15 * 60_000);
+const BIND_MS = Number(process.env.VOTE_BIND_MS ?? 10 * 60_000);
+const COOLDOWN_MS = Number(process.env.VOTE_COOLDOWN_MS ?? 20 * 60_000);
+const QUESTION = "Should Nervos DAO deposits held in any wallet count in community votes?";
+const OPTIONS = ["Yes", "No"];
+
 type Net = "testnet" | "mainnet";
 const net = (n: unknown): Net => (n === "mainnet" ? "mainnet" : "testnet");
 
@@ -54,6 +64,11 @@ db.exec(`
   PRAGMA journal_mode = WAL;
   CREATE TABLE IF NOT EXISTS nonces (nonce TEXT PRIMARY KEY, account TEXT NOT NULL, lock_hash TEXT NOT NULL, lock TEXT NOT NULL, message TEXT NOT NULL, network TEXT NOT NULL DEFAULT 'testnet', issued_at TEXT NOT NULL, used_at TEXT);
   CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, account TEXT NOT NULL, lock_hash TEXT NOT NULL, network TEXT NOT NULL DEFAULT 'testnet', created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS vbindings (lock_hash TEXT PRIMARY KEY, lock TEXT NOT NULL, account TEXT NOT NULL, bound_at TEXT NOT NULL, bound_block INTEGER NOT NULL, moved_from TEXT, cell_deps TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS vsessions (token TEXT PRIMARY KEY, account TEXT NOT NULL, created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS vpolls (id INTEGER PRIMARY KEY, snapshot_block INTEGER NOT NULL, opened_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS vvotes (poll_id INTEGER NOT NULL, account TEXT NOT NULL, choice TEXT NOT NULL, weight TEXT NOT NULL, detail TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (poll_id, account));
+  CREATE TABLE IF NOT EXISTS vhistory (id INTEGER PRIMARY KEY AUTOINCREMENT, lock_hash TEXT NOT NULL, account TEXT NOT NULL, action TEXT NOT NULL, at TEXT NOT NULL, block INTEGER);
 `);
 // Older databases predate the network column; add it in place.
 for (const t of ["nonces", "sessions"]) {
@@ -188,11 +203,102 @@ async function balanceOf(n: Net, lockLike: ccc.ScriptLike): Promise<bigint> {
   return sum;
 }
 
+// --- DAO voting (testnet) ----------------------------------------------------------------------
+
+async function retry<T>(read: () => Promise<T>, tries = 3): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await read();
+    } catch (e) {
+      if (i >= tries) throw e;
+      await new Promise((r) => setTimeout(r, 1000 * i));
+    }
+  }
+}
+
+function phaseAt(now = Date.now()) {
+  const id = Math.floor(now / CYCLE_MS);
+  const start = id * CYCLE_MS;
+  const voting = now - start >= BIND_MS;
+  return { id, voting, voteOpensAt: start + BIND_MS, closesAt: start + CYCLE_MS };
+}
+
+/** The poll of the current cycle, opened (snapshot at the tip) the first time the vote phase is seen. */
+async function currentPoll() {
+  const p = phaseAt();
+  if (!p.voting) return undefined;
+  const row = db.prepare("SELECT * FROM vpolls WHERE id = ?").get(p.id) as any;
+  if (row) return row;
+  const block = await retry(() => tip(VOTE_NET));
+  db.prepare("INSERT OR IGNORE INTO vpolls (id, snapshot_block, opened_at) VALUES (?, ?, ?)").run(p.id, Number(block), new Date().toISOString());
+  return db.prepare("SELECT * FROM vpolls WHERE id = ?").get(p.id) as any;
+}
+
+function tally(pollId: number) {
+  const votes = db.prepare("SELECT account, choice, weight, detail FROM vvotes WHERE poll_id = ? ORDER BY at").all(pollId) as any[];
+  const totals = Object.fromEntries(OPTIONS.map((o) => [o, { weight: 0n, accounts: 0 }]));
+  for (const v of votes) {
+    totals[v.choice].weight += BigInt(v.weight);
+    totals[v.choice].accounts += 1;
+  }
+  return {
+    totals: Object.fromEntries(Object.entries(totals).map(([o, t]) => [o, { weight: t.weight.toString(), accounts: t.accounts }])),
+    votes: votes.map((v) => ({ account: v.account, choice: v.choice, weight: v.weight, locks: JSON.parse(v.detail) })),
+  };
+}
+
+const weighed = new Map<string, { live: boolean; weight: bigint; deposits: number; withdrawing: number }>();
+
+/** What each of an account's locks weighs in a poll, and why a lock does not count. */
+async function weighAccount(account: string, poll: { snapshot_block: number; opened_at: string }) {
+  const bindings = db.prepare("SELECT * FROM vbindings WHERE account = ?").all(account) as any[];
+  const snapshot = BigInt(poll.snapshot_block);
+  let total = 0n;
+  const locks = [];
+  for (const b of bindings) {
+    const item: { lockHash: string; weight: string; counted: boolean; reason: string } = { lockHash: b.lock_hash, weight: "0", counted: false, reason: "" };
+    if (BigInt(b.bound_block) >= snapshot) item.reason = "bound at or after the snapshot block";
+    else if (b.moved_from && Date.parse(poll.opened_at) - Date.parse(b.bound_at) < COOLDOWN_MS) item.reason = `moved from ${b.moved_from}, still in its cooldown`;
+    else {
+      const key = `${poll.snapshot_block} ${b.lock_hash} ${b.cell_deps}`;
+      let found = weighed.get(key);
+      if (!found) {
+        found = await retry(async () => {
+          if (!(await depsLiveAt(RPC[VOTE_NET], JSON.parse(b.cell_deps), snapshot)).live) return { live: false, weight: 0n, deposits: 0, withdrawing: 0 };
+          const w = await daoWeightAt(RPC[VOTE_NET], JSON.parse(b.lock), snapshot);
+          return { live: true, weight: w.weight, deposits: w.deposits.length, withdrawing: w.withdrawing.length };
+        });
+        if (weighed.size > 10_000) weighed.clear();
+        weighed.set(key, found);
+      }
+      if (!found.live) item.reason = "a cell its proof ran with was not live at the snapshot; prove again";
+      else {
+        item.weight = found.weight.toString();
+        item.counted = true;
+        item.reason = `${found.deposits} deposit(s) live at the snapshot${found.withdrawing ? `, ${found.withdrawing} withdrawing cell(s) not counted` : ""}`;
+        total += found.weight;
+      }
+    }
+    locks.push(item);
+  }
+  return { total, locks };
+}
+
+function voterCookie(req: IncomingMessage): string | undefined {
+  const m = /(?:^|;\s*)ward_vote=([0-9a-f]{64})/.exec(req.headers.cookie ?? "");
+  if (!m) return undefined;
+  return (db.prepare("SELECT account FROM vsessions WHERE token = ?").get(m[1]) as any)?.account;
+}
+function voterOwner(account: string): boolean {
+  return !!db.prepare("SELECT 1 FROM vbindings WHERE account = ? LIMIT 1").get(account);
+}
+
 // --- routes ------------------------------------------------------------------------------------
 
 async function route(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? "/", "http://x");
   const session = cookieSession(req);
+  const voter = voterCookie(req);
 
   if (req.method === "GET" && url.pathname === "/api/config") {
     return send(res, 200, { domain: DOMAIN, networks: ["testnet", "mainnet"], genesis: GENESIS });
@@ -263,6 +369,122 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     if (!result.ok) return send(res, 400, { ok: false, reason: result.reason });
     const balance = await balanceOf(network, JSON.parse(row.lock));
     return send(res, 200, { ok: true, account: row.account, lockHash: row.lock_hash, balance });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/vote/state") {
+    limit(req, "vote-state", 60);
+    const p = phaseAt();
+    const poll = await currentPoll();
+    const last = db.prepare("SELECT * FROM vpolls WHERE id < ? ORDER BY id DESC LIMIT 1").get(p.id) as any;
+    return send(res, 200, {
+      now: Date.now(),
+      domain: DOMAIN,
+      phase: p.voting ? "vote" : "bind",
+      voteOpensAt: p.voteOpensAt,
+      closesAt: p.closesAt,
+      cooldownMinutes: COOLDOWN_MS / 60_000,
+      cycleMinutes: CYCLE_MS / 60_000,
+      question: QUESTION,
+      options: OPTIONS,
+      poll: poll ? { id: poll.id, snapshotBlock: poll.snapshot_block, ...tally(poll.id) } : null,
+      last: last ? { id: last.id, snapshotBlock: last.snapshot_block, ...tally(last.id) } : null,
+      me: voter ? { account: voter, myVote: poll ? ((db.prepare("SELECT choice FROM vvotes WHERE poll_id = ? AND account = ?").get(poll.id, voter) as any)?.choice ?? null) : null } : null,
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/vote/bindings") {
+    limit(req, "vote-bindings", 30);
+    const rows = db.prepare("SELECT lock_hash, account, bound_at, bound_block, moved_from FROM vbindings ORDER BY bound_at DESC LIMIT 200").all();
+    return send(res, 200, { bindings: rows });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/vote/nonce") {
+    limit(req, "vote-nonce", 30);
+    if (phaseAt().voting) throw new HttpError(409, "a vote is open: sign-up is frozen until it closes");
+    const { account, lock } = await body(req);
+    if (typeof account !== "string" || !account) throw new HttpError(400, "account missing");
+    if (voterOwner(account) && voter !== account) throw new HttpError(403, "that name is taken; pick another");
+    const script = parseLock(lock);
+    const nonce = randomBytes(16).toString("hex");
+    const issuedAt = new Date().toISOString();
+    let text: string;
+    try {
+      text = message({ domain: DOMAIN, account, lock: script, chain: GENESIS[VOTE_NET], issuedAt, nonce });
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+    db.prepare("INSERT INTO nonces (nonce, account, lock_hash, lock, message, network, issued_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+      nonce, account, script.hash(), JSON.stringify({ codeHash: script.codeHash, hashType: script.hashType, args: script.args }), text, VOTE_NET, issuedAt,
+    );
+    return send(res, 200, { nonce, message: text, template: JSON.parse(proofTemplate(script, text).stringify()) });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/vote/bind") {
+    limit(req, "vote-bind", 10);
+    if (phaseAt().voting) throw new HttpError(409, "a vote is open: sign-up is frozen until it closes");
+    const { nonce, tx } = await body(req);
+    const row = db.prepare("SELECT * FROM nonces WHERE nonce = ?").get(String(nonce)) as any;
+    if (!row) throw new HttpError(404, "unknown nonce");
+    if (voterOwner(row.account) && voter !== row.account) throw new HttpError(403, "that name is taken");
+    const r = await verify(
+      { lock: JSON.parse(row.lock), message: row.message, tx: tx as ccc.TransactionLike },
+      {
+        rpcUrl: RPC[VOTE_NET],
+        runLock: runLocks[VOTE_NET],
+        expect: { message: row.message, domain: DOMAIN, account: row.account, nonce: row.nonce, chain: GENESIS[VOTE_NET], maxAgeSeconds: MAX_AGE_SECONDS },
+        claimNonce: () => db.prepare("UPDATE nonces SET used_at = ? WHERE nonce = ? AND used_at IS NULL").run(new Date().toISOString(), row.nonce).changes === 1,
+      },
+    );
+    if (!r.ok) return send(res, 400, { ok: false, reason: r.reason });
+    const at = Number(await tip(VOTE_NET));
+    const now = new Date().toISOString();
+    const deps = JSON.stringify(r.cellDeps.map((o) => ({ txHash: o.txHash, index: Number(o.index) })));
+    const prev = db.prepare("SELECT account FROM vbindings WHERE lock_hash = ?").get(row.lock_hash) as any;
+    const moved = prev && prev.account !== row.account ? prev.account : null;
+    db.prepare(
+      "INSERT INTO vbindings (lock_hash, lock, account, bound_at, bound_block, moved_from, cell_deps) VALUES (?, ?, ?, ?, ?, ?, ?) " +
+        "ON CONFLICT (lock_hash) DO UPDATE SET account = excluded.account, bound_at = excluded.bound_at, bound_block = excluded.bound_block, moved_from = excluded.moved_from, cell_deps = excluded.cell_deps",
+    ).run(row.lock_hash, row.lock, row.account, now, at, moved, deps);
+    db.prepare("INSERT INTO vhistory (lock_hash, account, action, at, block) VALUES (?, ?, ?, ?, ?)").run(row.lock_hash, row.account, moved ? `moved from ${moved}` : "bound", now, at);
+    const headers: Record<string, string> = {};
+    if (voter !== row.account) {
+      const token = randomBytes(32).toString("hex");
+      db.prepare("INSERT INTO vsessions (token, account, created_at) VALUES (?, ?, ?)").run(token, row.account, now);
+      headers["set-cookie"] = `ward_vote=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${SECURE_COOKIE ? "; Secure" : ""}`;
+    }
+    return send(res, 200, { ok: true, account: row.account, lockHash: row.lock_hash, cycles: r.cycles, block: at, movedFrom: moved }, headers);
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/vote/unbind") {
+    limit(req, "vote-unbind", 10);
+    if (phaseAt().voting) throw new HttpError(409, "a vote is open: sign-up is frozen until it closes");
+    if (!voter) throw new HttpError(401, "sign up first");
+    const { lockHash } = await body(req);
+    const changed = db.prepare("DELETE FROM vbindings WHERE lock_hash = ? AND account = ?").run(String(lockHash), voter).changes;
+    if (changed !== 1) throw new HttpError(404, "no such sign-up on your name");
+    db.prepare("INSERT INTO vhistory (lock_hash, account, action, at, block) VALUES (?, ?, ?, ?, ?)").run(String(lockHash), voter, "unbound", new Date().toISOString(), Number(await tip(VOTE_NET)));
+    return send(res, 200, { ok: true });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/vote/cast") {
+    limit(req, "vote-cast", 10);
+    if (!voter) throw new HttpError(401, "sign up first");
+    const poll = await currentPoll();
+    if (!poll) throw new HttpError(409, "no vote is open now");
+    const { choice } = await body(req);
+    if (!OPTIONS.includes(choice)) throw new HttpError(400, "unknown option");
+    const w = await weighAccount(voter, poll);
+    db.prepare(
+      "INSERT INTO vvotes (poll_id, account, choice, weight, detail, at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (poll_id, account) DO UPDATE SET choice = excluded.choice, weight = excluded.weight, detail = excluded.detail, at = excluded.at",
+    ).run(poll.id, voter, choice, w.total.toString(), JSON.stringify(w.locks), new Date().toISOString());
+    return send(res, 200, { ok: true, choice, weight: w.total, locks: w.locks, snapshotBlock: poll.snapshot_block });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/vote/mine") {
+    limit(req, "vote-mine", 30);
+    if (!voter) return send(res, 200, { account: null, bindings: [] });
+    const rows = (db.prepare("SELECT lock_hash, lock, bound_at, bound_block, moved_from FROM vbindings WHERE account = ?").all(voter) as any[]).map((r) => ({ ...r, lock: JSON.parse(r.lock) }));
+    return send(res, 200, { account: voter, bindings: rows });
   }
 
   if (req.method === "POST" && url.pathname === "/api/weight") {
