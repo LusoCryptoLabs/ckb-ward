@@ -16,6 +16,8 @@
   --glow: rgba(125, 154, 70, 0.2);
   --badge: linear-gradient(145deg, #2a6f4d, #16533a);
   --display: "VT323", ui-monospace, "Courier New", monospace;
+  --bind: #dfe9d2;
+  --vote: #efe3c7;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -36,6 +38,8 @@
     --bad: #f2a199;
     --glow: rgba(166, 197, 109, 0.16);
     --badge: linear-gradient(145deg, #223228, #121b16);
+    --bind: #223020;
+    --vote: #3a2c14;
     color-scheme: dark;
   }
 }
@@ -213,3 +217,19 @@ pre.shows.template { max-height: 340px; overflow: auto; word-break: normal; }
 .dev p { margin: 6px 0; }
 
 footer { margin-top: 40px; border-top: 1px solid var(--line); padding-top: 16px; }
+
+/* DAO voting example (ported from the standalone demo) */
+.clock { padding: 12px 14px; border-radius: 3px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; border: 2px solid var(--line); margin: 10px 0; }
+.clock.bind { background: var(--bind); }
+.clock.vote { background: var(--vote); }
+.clock span { flex-basis: 100%; color: var(--muted); font-size: 0.9rem; }
+.step h2 { display: flex; align-items: center; gap: 10px; }
+.num { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 2px; border: 2px solid var(--accent); color: var(--accent); font-size: 1rem; font-family: var(--display); flex: none; }
+.num.done { background: var(--btn); color: var(--btn-fg); border-color: var(--btn); }
+.big .small { font-weight: 400; }
+.question { font-weight: 700; }
+.will { background: var(--bg); border: 2px solid var(--line); border-radius: 3px; padding: 10px 12px; margin: 10px 0; }
+.warn { padding: 10px 12px; border-radius: 3px; background: var(--vote); border: 2px solid color-mix(in srgb, var(--accent-2) 30%, var(--line)); margin: 10px 0; font-size: 0.92rem; }
+.how { margin-top: 32px; border-top: 1px solid var(--line); padding-top: 14px; font-size: 0.9rem; color: var(--muted); }
+.how summary { cursor: pointer; font-weight: 600; color: var(--fg); padding: 6px 0; }
+.how p { margin: 10px 0; }
