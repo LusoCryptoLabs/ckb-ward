@@ -1,20 +1,50 @@
 # Ward
 
-Lock proof for CKB.
+**Lock proof for CKB.** A lock-agnostic way for any CKB wallet to prove it controls a lock, with a single signature. Nothing is sent and nothing is spent. It is the CKB counterpart of Ethereum's EIP-1271 and Bitcoin's BIP-322.
 
-A lock-agnostic way for any CKB wallet to prove it controls a lock, for example to link Nervos DAO deposits to an account on a voting platform. It is the CKB counterpart of Ethereum's EIP-1271 and Bitcoin's BIP-322.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/playground-dark.png">
+    <img alt="The Ward playground: a gallery of runnable examples on testnet" src="docs/img/playground-light.png" width="860">
+  </picture>
+</p>
 
-The wallet signs a transaction that can never be committed. The verifier rebuilds that transaction itself, reads the lock's cell deps from the chain, and runs the lock in CKB-VM. Exit 0 means the wallet controls the lock.
+<p align="center">
+  <a href="https://ward-play.lusocryptolabs.com">Playground</a> ·
+  <a href="docs/SPEC.md">Spec</a> ·
+  <a href="https://www.npmjs.com/package/ckb-ward">npm</a>
+</p>
+
+## What it is
+
+On CKB a lock is a program, not a signature scheme. "Prove this wallet is mine" has no single answer: a secp256k1 key, a JoyID passkey, a multisig, Omnilock in one of its modes and a smart-account lock each prove control a different way.
+
+Ward gives them one answer. The wallet signs a transaction that can never be committed. The verifier rebuilds that transaction itself, reads the lock's cell deps from the chain, and runs the lock in CKB-VM. Exit 0 means the wallet controls the lock. One verifier handles every lock that signs the transaction hash, and any wallet that can sign an ordinary transaction can sign the proof, with no new code on either side.
 
 The full standard, with byte-exact templates, the rules a platform must follow, and test vectors, is in [docs/SPEC.md](docs/SPEC.md).
 
-Try it on testnet. The [playground](https://ward-play.lusocryptolabs.com) runs each part on its own: prove a lock, sign in, read a proof, and build the message and template ([source](playground/)). The [voting demo](https://ward-demo.lusocryptolabs.com) is a full reference platform for the rules: it binds a lock from any wallet CCC connects and counts its Nervos DAO deposits in a test vote ([source](demo/)).
+## Why it matters
 
-## Why
+Linking a wallet to an account is the first step of almost everything a CKB site wants to do: sign in, gate a community, check an airdrop, prove reserves, or count a holder's weight in a vote. Today most sites that try it accept one signature type. Metaforo, for example, binds only Neuron-style signatures (secp256k1 signed messages), so a holder whose Nervos DAO deposit sits under JoyID, a multisig, Omnilock or a smart-account lock cannot take part. Checking each scheme separately does not scale: every new lock needs new verifier code and new wallet code.
 
-Voting platforms on CKB today accept one signature type. Metaforo, for example, binds only Neuron-style signatures (secp256k1 signed messages). A CKB lock is a program, so holders whose deposits sit under JoyID, a multisig, Omnilock or a smart-account lock have no way to link them. Checking each signature scheme separately does not scale: every new lock needs new verifier code and new wallet code.
+Running the lock itself needs neither, so Ward works with wallets that do not exist yet, as long as they can sign a transaction. That is what lets a voting platform count any wallet's deposit, not only the ones it was written to understand.
 
-Running the lock itself needs neither. Any wallet that can sign an ordinary transaction for its lock can sign the proof, and one verifier checks every lock that signs the transaction hash.
+## Try it
+
+The [playground](https://ward-play.lusocryptolabs.com) runs each use case on its own, on testnet, with any CKB wallet. Nothing there is real.
+
+- **Prove a wallet is yours**, **What a wallet shows**, **What you sign**: the building block, and what your wallet does with it.
+- **Sign in with a wallet**: enter a site with no password and no account.
+- **Members only**: open a community, content, or a mint to wallets that hold enough.
+- **Airdrop check**: see if a wallet qualified at a past snapshot.
+- **Proof of reserves**: prove several addresses and add up the CKB you can prove.
+- **DAO voting**: count any wallet's Nervos DAO deposit in a community vote.
+
+The DAO voting example is a full reference platform for the rules of section 9 of the spec: it binds a lock from any wallet CCC connects, freezes sign-up while a vote is open, and counts each wallet's Nervos DAO deposit at one snapshot block. Its server lives in [playground/](playground/); the standalone [ward-demo](https://ward-demo.lusocryptolabs.com) now opens it.
+
+<p align="center">
+  <img alt="The DAO voting example: connect a wallet, prove it, and vote with its Nervos DAO deposit" src="docs/img/voting.png" width="760">
+</p>
 
 ## How it works
 
@@ -33,7 +63,7 @@ npm install ckb-ward
 
 Two entries:
 
-- `ckb-ward`: everything, the verifier included. Node only: the runner spawns ckb-debugger.
+- `ckb-ward`: everything, the verifier included. Node only: the runner spawns ckb-debugger or ward-vm.
 - `ckb-ward/wallet`: `message`, `parseMessage`, `proofTemplate`, `readProof` and the constants. No Node built-ins, so it bundles for a browser. This is what a wallet or a site needs.
 
 ## Use
@@ -84,6 +114,8 @@ Wallets can call `readProof(tx, lock)` (from `ckb-ward/wallet`) to recognise a p
 
 - **Cellula wallet** (testnet, since 2026-11-05). A site asks through the wallet link (`cellula-sdk` `CellulaWalletSigner`, `signTransaction(proofTemplate(lock, message))`). The wallet shows the request as a proof: who asks, the account, the address, and that nothing leaves. It refuses a proof for another site, another network or an address that is not its own, and any request from a site on another device. Tested through its screen with a starter and a guarded account, and with a real phone passkey (section 13 of the spec).
 - **JoyID** signs the template in its app (vector V2), but shows it as a transaction.
+
+Through CCC, the playground also signs with MetaMask, UniSat, OKX and UTXO Global (Omnilock in Ethereum and Bitcoin modes), among others.
 
 ### Lock runner
 
