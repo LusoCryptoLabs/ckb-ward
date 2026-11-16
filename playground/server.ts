@@ -128,7 +128,7 @@ function send(res: ServerResponse, status: number, value: unknown, headers: Reco
   res.end(JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
 }
 
-const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".woff2": "font/woff2" };
+const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".woff2": "font/woff2", ".wasm": "application/wasm" };
 function serveStatic(req: IncomingMessage, res: ServerResponse) {
   const path = normalize(decodeURIComponent((req.url ?? "/").split("?")[0])).replace(/^([/\\])+/, "");
   let file = join(STATIC_DIR, path);

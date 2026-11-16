@@ -43,7 +43,7 @@ export function Prove() {
           <p className="ok">
             <strong>✓ Done. This wallet is yours.</strong>
           </p>
-          <p className="small">This page checked your signature itself, with the very program your wallet uses to approve a transaction, and it accepted. Nothing was sent to our server.</p>
+          <p className="small">This page checked your signature itself, with the very program your wallet uses to approve a transaction, and it accepted. Your proof was not sent to our server.</p>
           <details className="dev">
             <summary>For developers</summary>
             <p className="small">
