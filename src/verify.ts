@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
 import { parseMessage, type MessageFields } from "./message.ts";
-import type { LockRun, MockCell, MockTransaction, RunLock } from "./runner.ts";
+import type { LockRun, MockCell, MockTransaction, RunLock } from "./lock.ts";
 import { PROOF_INPUT_CAPACITY, proofTemplate } from "./template.ts";
 
 /** What the prover hands in: the lock it claims, the message it was asked to sign, the signed tx. */

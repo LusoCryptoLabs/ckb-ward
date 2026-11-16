@@ -183,6 +183,8 @@ ckb-debugger is a development tool. It picks the VM version from `hash_type` for
 
 `ward-vm` (in `vm/`, 2026-11-05) is that verifier's runner. It is built from the node's own crates at the tag mainnet and testnet ran that day (0.210.0, commit 2592ddf; `ckb-vm` 0.24.15, where the `ckb-script` on crates.io pins 0.24.14), loads the chain's bundled spec (which checks the genesis hash), and runs the lock group of input 0 for a transaction submitted at a tip in the epoch given, with only the node's syscalls. Measured against ckb-debugger: the eight vectors of section 13 give the same exit code and the same cycles under both, accepted and with one signature bit flipped. A program that calls syscall 9001, which ckb-debugger adds for development, exits 0 under the debugger and stops under `ward-vm` with `invalid syscall 9001`, as a node would. Move the tag in `vm/Cargo.toml` when the node moves.
 
+`ckbVmJs` (2026-11-16) is a runner for a verifier with no process to start, a browser page among them. It hands the lock group of input 0 to [ckb-vm-js](https://github.com/Hanssen0-Alter-Ego/ckb-vm-js), which compiles the node's transaction verifier and CKB-VM to WebAssembly, with the consensus read from the node's `get_consensus` and the tip header from `get_tip_header`. Every cell is passed with an unknown origin, which changes nothing for a lock run alone. Measured with ckb-vm-js 0.2.0 at ae73c4a: every vector of section 13 gives the same exit code as `ward-vm`, accepted and with one signature bit flipped, and the same cycles when accepted.
+
 Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both refuse the proof with `Unknown(OutPoint(...))` before any script runs.
 
 ## 12. Not covered

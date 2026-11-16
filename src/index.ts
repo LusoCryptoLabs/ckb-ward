@@ -42,3 +42,4 @@ export {
 } from "./runner.ts";
 export { depsLiveAt, type DepAtSnapshot, type DepsAtSnapshot, type SnapshotOptions } from "./snapshot.ts";
 export { DAO_DEPOSIT_DATA, NERVOS_DAO_CODE_HASH, daoWeightAt, type DaoCell, type DaoWeight, type WeightOptions } from "./weight.ts";
+export { ckbVmJs, ckbVmJsConsensus, ckbVmJsRequest, parseCkbVmJsRun, type CkbVmJsOptions, type CkbVmJsVerifier } from "./ckbvmjs.ts";
