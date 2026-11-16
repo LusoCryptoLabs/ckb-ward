@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ccc } from "@ckb-ccc/connector-react";
+import { checkHere, request, type InPage } from "./inpage";
 
 export const REPO = "https://github.com/LusoCryptoLabs/ckb-ward";
 export const SPEC = `${REPO}/blob/main/docs/SPEC.md`;
@@ -124,6 +125,8 @@ type Ctx = {
   walletShows: string | null;
   /** Fetch a proof request, sign it, and post it to `endpoint`. Returns the server's JSON, throws its reason. */
   prove: <T>(endpoint: string) => Promise<T>;
+  /** Build a proof request in this page, sign it, and check it here: nothing goes to the server. */
+  proveHere: () => Promise<InPage>;
 };
 
 const WalletContext = createContext<Ctx | null>(null);
@@ -207,6 +210,42 @@ export function WalletProvider({ network, children }: { network: Net; children: 
     };
   }, [signer, lock, address, prepKey, stage, minute, network]);
 
+  /** Runs `fn` while the page shows what an EVM or Bitcoin wallet is asked to sign. */
+  const showingWallet = useCallback(
+    async <T,>(fn: () => Promise<T>): Promise<T> => {
+      if (!signer) throw new Error("connect a wallet first");
+      setWalletShows(null);
+      const s = signer as unknown as { signMessageRaw?: (m: string | ccc.BytesLike) => Promise<string> };
+      const own = Object.prototype.hasOwnProperty.call(s, "signMessageRaw");
+      const original = s.signMessageRaw;
+      if (typeof original === "function")
+        s.signMessageRaw = (m) => {
+          setWalletShows(typeof m === "string" ? m : ccc.hexFrom(m));
+          return original.call(signer, m);
+        };
+      try {
+        return await fn();
+      } finally {
+        if (own) s.signMessageRaw = original;
+        else delete s.signMessageRaw;
+        setStage("");
+        setWalletShows(null);
+      }
+    },
+    [signer],
+  );
+
+  const proveHere = useCallback(async (): Promise<InPage> => {
+    if (!signer || !lock) throw new Error("connect a wallet first");
+    return showingWallet(async () => {
+      const req = request(network, domain, address, lock);
+      setStage("wallet");
+      const signed = await signer.signTransaction(req.template);
+      setStage("checking");
+      return checkHere(network, domain, address, lock, req, signed);
+    });
+  }, [signer, lock, address, network, domain, showingWallet]);
+
   const prove = useCallback(
     async <T,>(endpoint: string): Promise<T> => {
       if (!signer || !lock) throw new Error("connect a wallet first");
@@ -257,6 +296,7 @@ export function WalletProvider({ network, children }: { network: Net; children: 
     stage,
     walletShows,
     prove,
+    proveHere,
   };
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
