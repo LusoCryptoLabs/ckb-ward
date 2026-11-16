@@ -61,9 +61,10 @@ Nodes refuse the proof as `Unknown(OutPoint)`. So a node cannot verify a proof e
 npm install ckb-ward
 ```
 
-Two entries:
+Three entries:
 
-- `ckb-ward`: everything, the verifier included. Node only: the runner spawns ckb-debugger or ward-vm.
+- `ckb-ward`: everything, the verifier included. Node only: the runners spawn ckb-debugger or ward-vm.
+- `ckb-ward/browser`: the verifier without the runners that start a process. No Node built-ins: a page can verify a proof itself, running the lock with `ckbVmJs` (below).
 - `ckb-ward/wallet`: `message`, `parseMessage`, `proofTemplate`, `readProof` and the constants. No Node built-ins, so it bundles for a browser. This is what a wallet or a site needs.
 
 ## Use
@@ -138,6 +139,17 @@ import { tipEpoch, wardVm } from "ckb-ward";
 const rpcUrl = "https://mainnet.ckb.dev/rpc";
 wardVm({ command: "vm/target/release/ward-vm", chain: "mainnet", epoch: () => tipEpoch(rpcUrl) });
 ```
+
+In a browser, or anywhere without a process to start, `ckbVmJs()` runs the lock with [ckb-vm-js](https://github.com/Hanssen0-Alter-Ego/ckb-vm-js): CKB's own transaction verifier and CKB-VM compiled to WebAssembly. Ward does not depend on it; create its verifier and pass it in. The chain's consensus and tip header are read from `rpcUrl`.
+
+```ts
+import { ckbVmJs, verify } from "ckb-ward/browser";
+import { createVerifier } from "ckb-vm-js";
+const runLock = ckbVmJs({ verifier: await createVerifier(), rpcUrl });
+const result = await verify(proof, { rpcUrl, runLock, expect });
+```
+
+Measured on 2026-11-16 with ckb-vm-js 0.2.0 (commit ae73c4a, built by its CI; not on npm yet): every saved vector gives the same exit code as `ward-vm`, accepted and with one signature bit flipped, and the same cycles when accepted. Bundled with Vite and run in Chromium 149, `verify()` accepted the secp256k1, JoyID and Cellula smart-account proofs and refused each with one bit flipped, reading only the testnet RPC. Set `CKB_VM_JS` to a built ckb-vm-js package directory to run `tests/ckbvmjs.test.ts` against it.
 
 ## Tests
 
