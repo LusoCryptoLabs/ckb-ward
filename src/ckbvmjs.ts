@@ -9,7 +9,8 @@ import { RPC_TIMEOUT_MS, jsonRpc } from "./verify.ts";
 export interface CkbVmJsVerifier {
   verifyScriptGroup(
     request: unknown,
-    group: { group_type: "lock"; script_hash: string },
+    // As ckb-vm-js types it, so `await createVerifier()` fits; this runner only asks for "lock".
+    group: { group_type: "lock" | "type"; script_hash: `0x${string}` },
   ): Promise<{ ok: boolean; cycles?: string; error?: { code: string; message: string } }>;
 }
 
