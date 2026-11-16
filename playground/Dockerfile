@@ -20,6 +20,8 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY src/ src/
 WORKDIR /app/playground
 COPY playground/package.json playground/package-lock.json ./
+# ckb-vm-js is not on npm: the lockfile points at the vendored package.
+COPY playground/vendor/ vendor/
 RUN npm ci
 COPY playground/ ./
 RUN npm run build
