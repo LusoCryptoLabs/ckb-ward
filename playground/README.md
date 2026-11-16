@@ -8,8 +8,12 @@ Live on testnet: [ward-play.lusocryptolabs.com](https://ward-play.lusocryptolabs
 
 Examples:
 
-- **Prove a lock.** Any wallet proves it controls its lock. The server reports the exit code, the
-  cycles, and the cell deps the lock ran with.
+- **Prove a lock.** Any wallet proves it controls its lock, and the page checks the proof itself:
+  Ward's verifier from `ckb-ward/browser`, with the lock run by
+  [ckb-vm-js](https://github.com/Hanssen0-Alter-Ego/ckb-vm-js) in WebAssembly. The proof is not sent
+  to the server; the page reads the chain from a public RPC. It reports the exit code, the cycles
+  and the cell deps the lock ran with. The other examples still check on the server, because there
+  the server is the one granting something (a session, access, a vote).
 - **Sign in.** A session, issued only after the proof checks out. This is what EIP-1271 does on
   Ethereum and BIP-322 on Bitcoin, for every CKB lock.
 - **Read a proof.** How a wallet recognises a proof request and shows the domain, not a transfer.
