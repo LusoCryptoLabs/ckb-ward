@@ -10,6 +10,17 @@ import { ccc } from "@ckb-ccc/core";
 import { DEFAULT_MAX_CYCLES, NotLiveError, ckbVmJs, ckbVmJsConsensus, ckbVmJsRequest, mockTransaction, parseCkbVmJsRun, proofInput, resolveCellDeps, verify, type CkbVmJsVerifier, type MockTransaction } from "../src/index.ts";
 import { NO_NETWORK, expectFor, flipWitnessByte, rpcFor, vectors, wardVmFor } from "./helpers.ts";
 
+// ckb-vm-js 0.2.0's verifier as its index.d.ts declares it, the part ckbVmJs calls. The caller passes
+// `await createVerifier()`, so it must fit CkbVmJsVerifier; `npm run typecheck` fails if it does not.
+type Hex = `0x${string}`;
+interface VmJsVerifier {
+  verifyScriptGroup(
+    request: { transaction: unknown; context: unknown; max_cycles: Hex },
+    group: { group_type: "lock" | "type"; script_hash: Hex },
+  ): Promise<{ ok: boolean; cycles?: Hex; error?: { code: string; message: string }; [key: string]: unknown }>;
+}
+export const fitsCkbVmJs = (v: VmJsVerifier): CkbVmJsVerifier => v;
+
 // get_consensus from the testnet node, 2026-11-16 (the fields read here).
 const TESTNET_CONSENSUS = {
   tx_version: "0x0",
