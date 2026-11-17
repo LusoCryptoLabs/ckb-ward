@@ -149,7 +149,7 @@ const runLock = ckbVmJs({ verifier: await createVerifier(), rpcUrl });
 const result = await verify(proof, { rpcUrl, runLock, expect });
 ```
 
-Measured on 2026-11-16 with ckb-vm-js 0.2.0 (commit ae73c4a, built by its CI; not on npm yet): every saved vector gives the same exit code as `ward-vm`, accepted and with one signature bit flipped, and the same cycles when accepted. Bundled with Vite and run in Chromium 149, `verify()` accepted the secp256k1, JoyID and Cellula smart-account proofs and refused each with one bit flipped, reading only the testnet RPC. Set `CKB_VM_JS` to a built ckb-vm-js package directory to run `tests/ckbvmjs.test.ts` against it.
+Measured on 2026-11-17 with ckb-vm-js 0.2.0 from npm (`npm i ckb-vm-js@0.2.0`): every saved vector gives the same exit code as `ward-vm`, accepted and with one signature bit flipped, and the same cycles when accepted. Bundled with Vite and run in Chromium 149, `verify()` accepted the secp256k1, JoyID and Cellula smart-account proofs and refused each with one bit flipped, reading only the testnet RPC. Set `CKB_VM_JS` to an installed ckb-vm-js package directory to run `tests/ckbvmjs.test.ts` against it.
 
 ### A bind server
 
