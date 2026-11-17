@@ -39,3 +39,15 @@ runner is built from `vm/`:
 docker build -f playground/Dockerfile -t ward-playground .
 docker run -p 8080:8080 -v ward-play-data:/app/data -e DOMAIN=localhost:8080 ward-playground
 ```
+
+## Airdrop claim (testnet)
+
+The airdrop example splits a pool of a test token, 1,000,000,000 DROP (xUDT), by each
+depositor's share of all CKB in Nervos DAO deposits at the snapshot block 23,095,100
+(427,965,438.93 CKB in 6,958 deposits). A Ward proof checks the deposit; the claim is a real
+transaction the claimer completes and signs, paying the token cell's CKB and the fee, to any
+address. One claim per deposit lock. The server signs only the pool's input, after checking that
+the outputs it built are unchanged and that no other input is the pool's.
+
+It runs only when `AIRDROP_POOL_KEY` (the pool's testnet key) is set. The token's owner lock is a
+different key, so a claim can never mint.

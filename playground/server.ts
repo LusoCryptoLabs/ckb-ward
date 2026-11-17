@@ -11,6 +11,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { ccc } from "@ckb-ccc/core";
+import { ClaimError, createClaims } from "./claim.ts";
 import { daoWeightAt, depsLiveAt, jsonRpc, message, proofTemplate, tipEpoch, verify, wardVm } from "../src/index.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -83,6 +84,22 @@ for (const t of ["nonces", "sessions"]) {
     /* already there */
   }
 }
+
+// --- airdrop claim (testnet): a test token pool split by share of all DAO deposits at the
+// snapshot. Off unless the pool's key is set. The total is all testnet deposits live at the
+// snapshot block, measured once (playground/scripts/dao-total.mjs; the token from playground/scripts/mint-drop.mjs).
+const claims = process.env.AIRDROP_POOL_KEY
+  ? createClaims(
+      {
+        rpcUrl: RPC.testnet,
+        poolKey: process.env.AIRDROP_POOL_KEY,
+        token: { codeHash: "0x25c29dc317811a6f6f3985a7a9ebc4838bd388d19d0feeecf0bcd60f6c0975bb", hashType: "type", args: "0x1f404f3384bc363c2b35a7b46ea544958e8e9a40c0c00f79e99403332180ece7" },
+        pool: 1_000_000_000n * 100_000_000n,
+        totalDeposits: 42_796_543_893_129_570n, // 427,965,438.93 CKB in 6,958 deposits at block 23,095,100; the explorer gave the same
+      },
+      db,
+    )
+  : undefined;
 
 // --- http helpers ------------------------------------------------------------------------------
 
@@ -376,10 +393,24 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       deposits.push({ capacity: d.capacity, block: d.createdAt, days: Number((ms * 10_000n) / DAY_MS) / 10_000 });
     }
     const ckbDays = Number(centi) / 100;
+    const claim = network === "testnet" && claims ? claims.offer(row.lock_hash, deposit) : undefined;
     return send(res, 200, {
-      ok: true, account: row.account, snapshot, deposit, ckbDays, deposits, withdrawing: w.withdrawing.length,
+      ok: true, account: row.account, snapshot, deposit, ckbDays, deposits, withdrawing: w.withdrawing.length, claim,
       min: AIRDROP_MIN, eligible: deposit >= AIRDROP_MIN, allocation: deposit >= AIRDROP_MIN ? deposit : 0n,
     });
+  }
+
+  if (req.method === "POST" && url.pathname.startsWith("/api/claim/")) {
+    limit(req, "claim", 10);
+    if (!claims) throw new HttpError(404, "claims are off here");
+    const b = await body(req);
+    try {
+      if (url.pathname === "/api/claim/prepare") return send(res, 200, await claims.prepare(String(b.ticket ?? ""), String(b.to ?? "")));
+      if (url.pathname === "/api/claim/send") return send(res, 200, await claims.send(String(b.claimId ?? ""), b.tx));
+    } catch (e) {
+      if (e instanceof ClaimError) throw new HttpError(e.status, e.message);
+      throw e;
+    }
   }
 
   if (req.method === "POST" && url.pathname === "/api/balance") {
