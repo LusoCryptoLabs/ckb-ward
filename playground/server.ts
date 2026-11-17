@@ -23,7 +23,12 @@ const SECURE_COOKIE = !/^localhost(:\d+)?$/.test(DOMAIN);
 /** The members-area example admits a wallet that holds at least this much CKB (in shannons). */
 const GATE_THRESHOLD = BigInt(process.env.GATE_CKB_SHANNONS ?? "10000000000");
 /** The airdrop example checks a Nervos DAO deposit at a fixed past block, per network. */
-const AIRDROP_SNAPSHOT: Record<"testnet" | "mainnet", number> = { testnet: 23000000, mainnet: 20960000 };
+const AIRDROP_SNAPSHOT: Record<"testnet" | "mainnet", number> = {
+  testnet: Number(process.env.AIRDROP_SNAPSHOT_TESTNET ?? 23095100),
+  mainnet: Number(process.env.AIRDROP_SNAPSHOT_MAINNET ?? 20960000),
+};
+const DAY_MS = 86_400_000n;
+const SHANNONS = 100_000_000n;
 const AIRDROP_MIN = BigInt(process.env.AIRDROP_MIN_SHANNONS ?? "100000000");
 
 // --- DAO voting example: a stateful poll in cycles, testnet only (the full platform of the spec's
@@ -359,7 +364,22 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     const snapshot = AIRDROP_SNAPSHOT[network];
     const w = await daoWeightAt(RPC[network], JSON.parse(row.lock), snapshot);
     const deposit = w.weight;
-    return send(res, 200, { ok: true, account: row.account, snapshot, deposit, min: AIRDROP_MIN, eligible: deposit >= AIRDROP_MIN, allocation: deposit >= AIRDROP_MIN ? deposit : 0n });
+    // CKB-days, the measure airdrops to Nervos DAO depositors have ranked by: each deposit's CKB
+    // times the days from its block to the snapshot block, by block timestamps.
+    const at = async (b: bigint) => BigInt((await rpcs[network]("get_header_by_number", [ccc.numToHex(b)])).timestamp);
+    const snapMs = await at(BigInt(snapshot));
+    let centi = 0n; // CKB-days times 100
+    const deposits = [];
+    for (const d of w.deposits) {
+      const ms = snapMs - (await at(d.createdAt));
+      centi += (d.capacity * ms * 100n) / (SHANNONS * DAY_MS);
+      deposits.push({ capacity: d.capacity, block: d.createdAt, days: Number((ms * 10_000n) / DAY_MS) / 10_000 });
+    }
+    const ckbDays = Number(centi) / 100;
+    return send(res, 200, {
+      ok: true, account: row.account, snapshot, deposit, ckbDays, deposits, withdrawing: w.withdrawing.length,
+      min: AIRDROP_MIN, eligible: deposit >= AIRDROP_MIN, allocation: deposit >= AIRDROP_MIN ? deposit : 0n,
+    });
   }
 
   if (req.method === "POST" && url.pathname === "/api/balance") {
