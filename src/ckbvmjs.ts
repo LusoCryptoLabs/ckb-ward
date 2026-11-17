@@ -25,7 +25,7 @@ export interface CkbVmJsOptions {
 
 const hex = (n: number | bigint) => `0x${BigInt(n).toString(16)}`;
 
-/** An RPC header or transaction without its `hash`: ckb-vm-js recomputes it and refuses the field. */
+/** An RPC header or transaction without its `hash`: ckb-vm-js recomputes it and refuses one that does not match. */
 function withoutHash(o: unknown): unknown {
   const { hash: _, ...rest } = o as Record<string, unknown>;
   return rest;
@@ -99,7 +99,7 @@ export function parseCkbVmJsRun(r: { ok: boolean; cycles?: string; error?: { cod
 
 /**
  * A RunLock backed by ckb-vm-js, for a verifier with no backend. Same exit codes and cycles as
- * ward-vm on every saved proof (2026-11-16, ckb-vm-js 0.2.0 at ae73c4a).
+ * ward-vm on every saved proof (2026-11-17, ckb-vm-js 0.2.0 from npm).
  *
  *   import { createVerifier } from "ckb-vm-js";
  *   const runLock = ckbVmJs({ verifier: await createVerifier(), rpcUrl });

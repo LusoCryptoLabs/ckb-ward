@@ -41,7 +41,7 @@ NETWORK=testnet DOMAIN=vote.example PORT=8090 node examples/bind-server/server.t
 The lock runs in one of two runners:
 
 - **ckb-vm-js** (default): CKB's own verifier and CKB-VM in WebAssembly, JavaScript only. Install
-  it next to ckb-ward. It is not on npm yet; its CI package works (`playground/vendor/`).
+  it next to ckb-ward: `npm i ckb-vm-js@0.2.0`.
 - **ward-vm**: `RUNNER=ward-vm WARD_VM=/path/to/ward-vm`, the node's own script crates as a native
   binary (`vm/`, see the [top README](../../README.md#lock-runner)).
 

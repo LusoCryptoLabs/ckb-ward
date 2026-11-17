@@ -1,5 +1,5 @@
 // ckbVmJs: the lock run by ckb-vm-js (CKB's verifier and CKB-VM in WebAssembly). Offline: the request
-// it builds and how it reads a result. With CKB_VM_JS (a built ckb-vm-js package directory): every
+// it builds and how it reads a result. With CKB_VM_JS (an installed ckb-vm-js package directory): every
 // saved proof, compared with ward-vm when WARD_VM or WARD_VM_WSL is set as well.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -90,7 +90,7 @@ test("result: an exit code only when the lock itself exited", () => {
 // ---------- with ckb-vm-js ----------
 
 const PKG = process.env.CKB_VM_JS;
-const NO_VM_JS = PKG ? false : "set CKB_VM_JS to a built ckb-vm-js package directory";
+const NO_VM_JS = PKG ? false : "set CKB_VM_JS to an installed ckb-vm-js package directory";
 let made: Promise<CkbVmJsVerifier> | undefined;
 async function vmJs(): Promise<CkbVmJsVerifier> {
   made ??= import(pathToFileURL(join(PKG!, "js", "index.js")).href).then((m) => m.createVerifier({ wasm: readFileSync(join(PKG!, "pkg", "ckb_wasm_verifier_bg.wasm")) }));
@@ -128,7 +128,7 @@ for (const v of vectors) {
   });
 }
 
-test("ckb-vm-js refuses a header with its hash, so the runner drops it (control)", { skip: NO_NETWORK || NO_VM_JS }, async () => {
+test("ckb-vm-js refuses a header whose hash does not match, so the runner drops it (control)", { skip: NO_NETWORK || NO_VM_JS }, async () => {
   const v = vectors.find((x) => x.file === "secp256k1.json")!;
   const tx = ccc.Transaction.from(v.tx);
   const mock = mockTransaction(tx, proofInput(v.lock), await resolveCellDeps(rpcFor(v), tx.cellDeps));
@@ -138,7 +138,10 @@ test("ckb-vm-js refuses a header with its hash, so the runner drops it (control)
   const group = { group_type: "lock" as const, script_hash: ccc.Script.from(v.lock).hash() };
   const verifier = await vmJs();
   assert.equal((await verifier.verifyScriptGroup(request, group)).ok, true);
-  const raw = await verifier.verifyScriptGroup({ ...request, context: { ...request.context, tip_header: tip } }, group);
+  const withHash = (hash: string) => ({ ...request, context: { ...request.context, tip_header: { ...tip, hash } } });
+  assert.equal((await verifier.verifyScriptGroup(withHash(tip.hash), group)).ok, true);
+  const wrong = tip.hash.slice(0, -2) + (tip.hash.endsWith("00") ? "01" : "00");
+  const raw = await verifier.verifyScriptGroup(withHash(wrong), group);
   assert.equal(raw.ok, false);
-  assert.match(raw.error!.message, /unknown field `hash`/);
+  assert.match(raw.error!.message, /header hash does not match/);
 });
