@@ -36,7 +36,7 @@ The [playground](https://ward-play.lusocryptolabs.com) runs each use case on its
 - **Prove a wallet is yours**, **What a wallet shows**, **What you sign**: the building block, and what your wallet does with it.
 - **Sign in with a wallet**: enter a site with no password and no account.
 - **Members only**: open a community, content, or a mint to wallets that hold enough.
-- **Airdrop check**: see if a wallet qualified at a past snapshot, and its score in CKB-days (CKB times days deposited).
+- **Airdrop claim**: see if a wallet qualified at a past snapshot, its score in CKB-days, and on testnet claim its share of a test token pool, sent to any address.
 - **Proof of reserves**: prove several addresses and add up the CKB you can prove.
 - **DAO voting**: count any wallet's Nervos DAO deposit in a community vote.
 

@@ -80,7 +80,7 @@ const EXAMPLES: Ex[] = [
   { id: "message", group: "how", title: "What you sign", blurb: "See exactly what your wallet is asked to sign, in plain text.", Icon: IconMessage, Comp: MessageTemplate },
   { id: "signin", group: "build", title: "Sign in with a wallet", blurb: "Enter a site with your wallet, no password and no account.", Icon: IconSignIn, Comp: SignIn },
   { id: "gate", group: "build", title: "Members only", blurb: "Open a community, content, or a mint to wallets that hold enough.", Icon: IconGate, Comp: TokenGate },
-  { id: "airdrop", group: "build", title: "Airdrop check", blurb: "See if a wallet qualifies for an airdrop at a past snapshot.", Icon: IconAirdrop, Comp: Airdrop },
+  { id: "airdrop", group: "build", title: "Airdrop claim", blurb: "Prove a Nervos DAO deposit and claim your share of a token pool, from any wallet.", Icon: IconAirdrop, Comp: Airdrop },
   { id: "reserves", group: "build", title: "Proof of reserves", blurb: "Prove several addresses and add up the CKB you can prove.", Icon: IconReserves, Comp: Reserves },
   { id: "vote", group: "build", title: "DAO voting", blurb: "Count any wallet's Nervos DAO deposit in a community vote.", Icon: IconVote, Comp: Voting },
 ];

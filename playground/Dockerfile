@@ -30,7 +30,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY src/ src/
-COPY playground/server.ts playground/
+COPY playground/server.ts playground/claim.ts playground/
 COPY --from=web /app/playground/dist playground/dist
 COPY --from=vm /vm/target/release/ward-vm /usr/local/bin/ward-vm
 ENV PORT=8080 DATA_DIR=/app/data WARD_VM=/usr/local/bin/ward-vm
