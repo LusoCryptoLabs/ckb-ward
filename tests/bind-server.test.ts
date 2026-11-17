@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { ccc } from "@ckb-ccc/core";
-import { createBindServer } from "../examples/bind-server/server.ts";
+import { createBindServer, runnerFromEnv } from "../examples/bind-server/server.ts";
 import { ckbVmJs, type CkbVmJsVerifier, type RunLock } from "../src/index.ts";
 import { NO_NETWORK, RPC_URL, runLock as envRunLock } from "./helpers.ts";
 
@@ -20,6 +20,17 @@ async function runner(): Promise<RunLock | undefined> {
   return ckbVmJs({ verifier, rpcUrl: RPC_URL });
 }
 const NO_RUNNER = process.env.CKB_VM_JS || envRunLock ? false : "set CKB_VM_JS, WARD_VM(_WSL) or CKB_DEBUGGER(_WSL)";
+
+test("bind server: the default runner (ckb-vm-js) starts in Node", async () => {
+  // ckb-vm-js cannot fetch its own .wasm from a file URL in Node; the server passes the bytes.
+  const saved = process.env.RUNNER;
+  delete process.env.RUNNER;
+  try {
+    assert.equal(typeof (await runnerFromEnv("testnet", RPC_URL)), "function");
+  } finally {
+    if (saved !== undefined) process.env.RUNNER = saved;
+  }
+});
 
 test("bind server: a wallet binds, a replay and a changed signature are refused", { skip: NO_NETWORK || NO_RUNNER }, async (t) => {
   const server = await createBindServer({ network: "testnet", domain: "vote.example", rpcUrl: RPC_URL, runLock: (await runner())! });

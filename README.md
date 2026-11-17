@@ -149,6 +149,8 @@ const runLock = ckbVmJs({ verifier: await createVerifier(), rpcUrl });
 const result = await verify(proof, { rpcUrl, runLock, expect });
 ```
 
+In Node, ckb-vm-js cannot fetch its `.wasm` from a file URL; read it and pass the bytes: `createVerifier({ wasm: await readFile(new URL(import.meta.resolve("ckb-vm-js/wasm"))) })`.
+
 Measured on 2026-11-17 with ckb-vm-js 0.2.0 from npm (`npm i ckb-vm-js@0.2.0`): every saved vector gives the same exit code as `ward-vm`, accepted and with one signature bit flipped, and the same cycles when accepted. Bundled with Vite and run in Chromium 149, `verify()` accepted the secp256k1, JoyID and Cellula smart-account proofs and refused each with one bit flipped, reading only the testnet RPC. Set `CKB_VM_JS` to an installed ckb-vm-js package directory to run `tests/ckbvmjs.test.ts` against it.
 
 ### A bind server
