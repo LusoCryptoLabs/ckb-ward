@@ -9,6 +9,7 @@
 //   POST /bind/verify   { nonce, tx }         -> { ok, account, address, lockHash, cycles, cellDeps } | { ok: false, reason }
 //   GET  /weight?address=...&block=...        -> { weight, deposits, withdrawing }
 import { randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
 import { ccc } from "@ckb-ccc/core";
@@ -56,8 +57,10 @@ export async function runnerFromEnv(network: Network, rpcUrl: string): Promise<R
   const name = "ckb-vm-js";
   const vmjs = (await import(name).catch(() => {
     throw new Error("ckb-vm-js is not installed: install it, or set RUNNER=ward-vm and WARD_VM");
-  })) as { createVerifier(): Promise<CkbVmJsVerifier> };
-  return ckbVmJs({ verifier: await vmjs.createVerifier(), rpcUrl });
+  })) as { createVerifier(options?: { wasm?: Uint8Array }): Promise<CkbVmJsVerifier> };
+  // In Node, ckb-vm-js cannot fetch its .wasm from a file URL, so read it and pass the bytes.
+  const wasm = await readFile(new URL(import.meta.resolve(`${name}/wasm`)));
+  return ckbVmJs({ verifier: await vmjs.createVerifier({ wasm }), rpcUrl });
 }
 
 export async function createBindServer(options: BindServerOptions): Promise<Server> {
