@@ -58,7 +58,7 @@ for (const v of vectors) {
     // The lock refuses it as well: the same witness on the other message's template.
     const tx = ccc.Transaction.from(v.tx);
     const other = otherMessage(v.message);
-    const tpl = proofTemplate(v.lock, other);
+    const tpl = proofTemplate(v.lock, other, { version: 0 });
     tpl.cellDeps = tx.cellDeps;
     tpl.witnesses = tx.witnesses;
     const raw = await runRaw(v, tpl);
