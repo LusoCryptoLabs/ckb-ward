@@ -147,6 +147,18 @@ class HttpError extends Error {
   }
 }
 
+/** Parse a lock from a request, turning a malformed one into a 400 rather than a 500. */
+function parseLock(lock: unknown): ccc.Script {
+  try {
+    // Script.from does not check sizes; encoding does, so a short code hash fails here and not in hash().
+    const script = ccc.Script.from(lock as ccc.ScriptLike);
+    script.toBytes();
+    return script;
+  } catch {
+    throw new HttpError(400, "bad lock");
+  }
+}
+
 async function body(req: IncomingMessage): Promise<any> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -243,7 +255,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (req.method === "POST" && url.pathname === "/api/weight") {
     limit(req, "weight", 20);
     const { lock } = await body(req);
-    const script = ccc.Script.from(lock);
+    const script = parseLock(lock);
     const at = await tip();
     const w = await daoWeightAt(RPC_URL, script, at);
     return send(res, 200, { block: at, weight: w.weight, deposits: w.deposits.length, withdrawing: w.withdrawing.length });
@@ -255,7 +267,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     const { account, lock } = await body(req);
     if (typeof account !== "string") throw new HttpError(400, "account missing");
     if (owner(account) && me !== account) throw new HttpError(403, "that account belongs to someone else on this demo; pick another name");
-    const script = ccc.Script.from(lock);
+    const script = parseLock(lock);
     const nonce = randomBytes(16).toString("hex");
     const issuedAt = new Date().toISOString();
     let text: string;
