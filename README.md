@@ -25,7 +25,7 @@ The full standard, with byte-exact templates, the rules a platform must follow, 
 
 ## Why it matters
 
-Linking a wallet to an account is the first step of almost everything a CKB site wants to do: sign in, gate a community, check an airdrop, prove reserves, or count a holder's weight in a vote. Today most sites that try it accept one signature type. Metaforo, for example, binds only Neuron-style signatures (secp256k1 signed messages), so a holder whose Nervos DAO deposit sits under JoyID, a multisig, Omnilock or a smart-account lock cannot take part. Checking each scheme separately does not scale: every new lock needs new verifier code and new wallet code.
+Linking a wallet to an account is the first step of almost everything a CKB site wants to do: sign in, gate a community, check an airdrop, prove reserves, or count a holder's weight in a vote. Today a site checks a signed message, which proves a key, not the lock that holds the coins. Some accept one signature type: Metaforo binds only Neuron-style signatures (secp256k1 signed messages), so a holder whose Nervos DAO deposit sits under JoyID, a multisig, Omnilock or a smart-account lock cannot take part there. Others accept the six types CCC verifies, which still leaves out a multisig, the quantum-resistant lock and smart-account locks. Checking each scheme separately does not scale: every new lock needs new verifier code and new wallet code.
 
 Running the lock itself needs neither, so Ward works with wallets that do not exist yet, as long as they can sign a transaction. That is what lets a voting platform count any wallet's deposit, not only the ones it was written to understand.
 
