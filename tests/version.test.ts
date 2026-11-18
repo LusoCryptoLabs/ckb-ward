@@ -78,11 +78,11 @@ test("version 1: an output lock that is not the lock the out point commits to ma
   assert.equal(proofVersion(proofTemplate(lockB, text, { version: 1 }), lockB, text), 1);
 });
 
-test("each saved vector reads as a proof of the version it says; only the JoyID app vectors are still version 0", () => {
+test("each saved vector reads as a proof of the version it says; only two JoyID app vectors are still version 0", () => {
   for (const v of vectors) {
     assert.equal(proofVersion(v.tx, v.lock, v.message), versionOf(v), v.file);
   }
-  assert.deepEqual(vectors.filter((v) => versionOf(v) === 0).map((v) => v.file).sort(), ["joyid-subkey.json", "joyid.json", "mainnet-joyid.json"]);
+  assert.deepEqual(vectors.filter((v) => versionOf(v) === 0).map((v) => v.file).sort(), ["joyid-subkey.json", "mainnet-joyid.json"]);
 });
 
 // ---- signed here, verified with the lock runner ----
