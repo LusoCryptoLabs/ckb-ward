@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
-import { ckbDebugger, parseMessage, tipEpoch, wardVm, type Expect, type RunLock } from "../src/index.ts";
+import { ckbDebugger, parseMessage, tipEpoch, wardVm, type Expect, type ProofVersion, type RunLock } from "../src/index.ts";
 
 export interface Control {
   about: string;
@@ -16,6 +16,8 @@ export interface Vector {
   name: string;
   /** The chain the proof was signed for and its cell deps live on. Default testnet. */
   network?: "testnet" | "mainnet";
+  /** Version of the signed bytes. Default 0: the vectors signed before version 1 existed. */
+  version?: ProofVersion;
   about: string;
   lock: ccc.ScriptLike;
   message: string;
@@ -33,6 +35,9 @@ const DIR = new URL("./vectors/", import.meta.url);
 export const vectors: Vector[] = readdirSync(DIR)
   .filter((f) => f.endsWith(".json"))
   .map((f) => ({ file: f, ...JSON.parse(readFileSync(new URL(f, DIR), "utf8")) }));
+
+/** The version a saved vector was signed as. */
+export const versionOf = (v: { version?: ProofVersion }): ProofVersion => v.version ?? 0;
 
 /** Testnet RPC. CKB_WARD_OFFLINE=1 skips every test that needs it. */
 export const RPC_URL = process.env.CKB_RPC_URL ?? "https://testnet.ckb.dev/rpc";

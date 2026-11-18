@@ -2,11 +2,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
-import { PROOF_INDEX, PROOF_INPUT_CAPACITY, parseMessage, proofOutPoint, proofTemplate, readProof } from "../src/index.ts";
-import { otherMessage, vectors } from "./helpers.ts";
+import { PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG, PROOF_TAG_V1, parseMessage, proofOutPoint, proofTemplate, readProof } from "../src/index.ts";
+import { otherMessage, vectors, versionOf } from "./helpers.ts";
 
 function rebuild(v: (typeof vectors)[number], message: string): ccc.Transaction {
-  const tpl = proofTemplate(v.lock, message, { version: 0 });
+  const tpl = proofTemplate(v.lock, message, { version: versionOf(v) });
   tpl.cellDeps = ccc.Transaction.from(v.tx).cellDeps;
   return tpl;
 }
@@ -22,15 +22,22 @@ for (const v of vectors) {
   });
 }
 
-test("the out point commits to the tag, the lock and the message", () => {
-  const v = vectors.find((x) => x.file === "secp256k1.json")!;
-  const op = proofOutPoint(v.lock, v.message, 0);
-  assert.equal(op.index, BigInt(PROOF_INDEX));
-  const tag = ccc.bytesFrom("CKB lock proof v0\n", "utf8");
-  assert.equal(tag.length, 18);
-  assert.equal(op.txHash, ccc.hashCkb(ccc.bytesConcat(tag, ccc.Script.from(v.lock).hash(), ccc.bytesFrom(v.message, "utf8"))));
-  const out = proofTemplate(v.lock, v.message, { version: 0 }).outputs[0];
-  assert.equal(out.capacity, BigInt(41 + ccc.bytesFrom(v.message, "utf8").length) * 100000000n);
+test("the out point commits to the tag of the version, the lock and the message", () => {
+  for (const v of vectors) {
+    const version = versionOf(v);
+    const op = proofOutPoint(v.lock, v.message, version);
+    assert.equal(op.index, BigInt(PROOF_INDEX));
+    const tag = ccc.bytesFrom(version === 0 ? PROOF_TAG : PROOF_TAG_V1, "utf8");
+    assert.equal(tag.length, 18);
+    assert.equal(op.txHash, ccc.hashCkb(ccc.bytesConcat(tag, ccc.Script.from(v.lock).hash(), ccc.bytesFrom(v.message, "utf8"))), v.file);
+    assert.ok(op.eq(ccc.Transaction.from(v.tx).inputs[0].previousOutput), v.file);
+    // The output holds its occupied capacity: 8 of capacity, the lock, then the message. Version 0
+    // puts it under the null lock (33 bytes), version 1 under the claimed lock.
+    const out = ccc.Transaction.from(v.tx).outputs[0];
+    const lockBytes = version === 0 ? 33 : ccc.Script.from(v.lock).occupiedSize;
+    assert.equal(out.capacity, BigInt(8 + lockBytes + ccc.bytesFrom(v.message, "utf8").length) * 100000000n, v.file);
+    assert.equal(out.lock.eq(ccc.Script.from(v.lock)), version === 1, v.file);
+  }
 });
 
 test("the input carries the cell the verifier resolves: capacity u64::MAX, the lock, no type, no data", () => {

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
 import { PROOF_INPUT_CAPACITY, mockTransaction, proofInput, proofTemplate, resolveCellDeps, verify, type MockTransaction, type VerifyResult } from "../src/index.ts";
-import { NO_NETWORK, NO_VM, expectFor, flipWitnessByte, otherMessage, poolAccept, rpcFor, runLockFor, vectors, type Vector } from "./helpers.ts";
+import { NO_NETWORK, NO_VM, expectFor, flipWitnessByte, otherMessage, poolAccept, rpcFor, runLockFor, vectors, versionOf, type Vector } from "./helpers.ts";
 
 const opts = (v: Vector, message: string) => ({ rpcUrl: rpcFor(v), runLock: runLockFor(v)!, expect: expectFor(message) });
 const show = (r: VerifyResult) => (r.ok ? `ACCEPTED, cycles ${r.cycles}` : `REFUSED, ${r.reason}${r.run?.cycles ? `, cycles ${r.run.cycles}` : ""}`);
@@ -58,7 +58,7 @@ for (const v of vectors) {
     // The lock refuses it as well: the same witness on the other message's template.
     const tx = ccc.Transaction.from(v.tx);
     const other = otherMessage(v.message);
-    const tpl = proofTemplate(v.lock, other, { version: 0 });
+    const tpl = proofTemplate(v.lock, other, { version: versionOf(v) });
     tpl.cellDeps = tx.cellDeps;
     tpl.witnesses = tx.witnesses;
     const raw = await runRaw(v, tpl);
@@ -113,11 +113,10 @@ for (const v of vectors) {
 }
 
 test("anyone-can-pay: the path without a signature is real, and only the template closes it", { skip: NO_VM }, async (t) => {
-  // Precondition of controls.noSignature: the refusal (exit -44, no output to pair the input with)
-  // must come from the template, not from a lock that never opens without a signature. The same
-  // empty witness on a transaction the prover built, whose only output is under the same lock and
-  // receives the input's whole capacity, opens the lock. The verifier refuses that transaction at
-  // the template check, before any lock runs.
+  // Precondition of controls.noSignature: the refusal must come from the template, not from a lock
+  // that never opens without a signature. The same empty witness on a transaction the prover built,
+  // whose only output is under the same lock, has no data and receives the input's whole capacity,
+  // opens the lock. The verifier refuses that transaction at the template check, before any lock runs.
   const v = vectors.find((x) => x.file === "anyone-can-pay.json")!;
   const c = v.controls!.noSignature;
   const tx = ccc.Transaction.from(c.tx).clone();
@@ -129,6 +128,21 @@ test("anyone-can-pay: the path without a signature is real, and only the templat
   assert.equal(raw.code, 0);
   const r = await verify({ lock: v.lock, message: v.message, tx }, { ...opts(v, v.message), runLock: async () => assert.fail("no lock run") });
   assert.match(!r.ok ? r.reason : "", /not the proof template/);
+
+  // Version 1 puts the template's output under the claimed lock, so the payment path sees it. Two
+  // things the template fixes keep that path shut, each measured alone on the opening transaction.
+  assert.equal(versionOf(v), 1);
+  const template = ccc.Transaction.from(c.tx);
+  assert.ok(template.outputs[0].lock.eq(ccc.Script.from(v.lock)));
+  const withMessage = tx.clone();
+  withMessage.outputsData[0] = template.outputsData[0];
+  const a = await runRaw(v, withMessage);
+  const lessCapacity = tx.clone();
+  lessCapacity.outputs[0].capacity = template.outputs[0].capacity;
+  const b = await runRaw(v, lessCapacity);
+  t.diagnostic(`the same, with the message as the output's data: exit ${a.code}; with the template's capacity and no data: exit ${b.code}`);
+  assert.equal(a.code, c.exit);
+  assert.notEqual(b.code, 0);
 });
 
 test("multisig: each control keeps the accepted first signature, so the second slot is what fails", () => {

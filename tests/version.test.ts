@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
 import { NULL_LOCK, PROOF_TAG, PROOF_TAG_V1, PROOF_VERSION, message, proofOutPoint, proofTemplate, proofVersion, readProof, verify, type ProofVersion } from "../src/index.ts";
-import { NO_VM, RPC_URL, expectFor, flipWitnessByte, runLock, vectors } from "./helpers.ts";
+import { NO_VM, RPC_URL, expectFor, flipWitnessByte, runLock, vectors, versionOf } from "./helpers.ts";
 import { TESTNET_GENESIS } from "./stub.ts";
 
 const VERSIONS: ProofVersion[] = [0, 1];
@@ -78,10 +78,11 @@ test("version 1: an output lock that is not the lock the out point commits to ma
   assert.equal(proofVersion(proofTemplate(lockB, text, { version: 1 }), lockB, text), 1);
 });
 
-test("the saved vectors are version 0 and still read as proofs", () => {
+test("each saved vector reads as a proof of the version it says; only the JoyID app vectors are still version 0", () => {
   for (const v of vectors) {
-    assert.equal(proofVersion(v.tx, v.lock, v.message), 0, v.file);
+    assert.equal(proofVersion(v.tx, v.lock, v.message), versionOf(v), v.file);
   }
+  assert.deepEqual(vectors.filter((v) => versionOf(v) === 0).map((v) => v.file).sort(), ["joyid-subkey.json", "joyid.json", "mainnet-joyid.json"]);
 });
 
 // ---- signed here, verified with the lock runner ----

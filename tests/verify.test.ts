@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
-import { message, proofTemplate, verify, type Expect, type RunLock, type VerifyOptions } from "../src/index.ts";
+import { message, parseMessage, proofTemplate, verify, type Expect, type RunLock, type VerifyOptions } from "../src/index.ts";
 import { expectFor, vectors } from "./helpers.ts";
 import { TESTNET_GENESIS } from "./stub.ts";
 
@@ -37,7 +37,9 @@ test("a proof offered for another lock", async () => {
 
 test("the message must be the one issued, byte for byte", async () => {
   // A prover who moves "Issued at" forward to stretch an old nonce, or swaps the lock line.
-  const later = v.message.replace("Issued at: 2026-11-04T18:00:00Z", "Issued at: 2026-11-04T18:09:00Z");
+  const issuedAt = parseMessage(v.message).issuedAt;
+  const later = v.message.replace(`Issued at: ${issuedAt}`, `Issued at: ${new Date(Date.parse(issuedAt) + 9 * 60_000).toISOString()}`);
+  assert.notEqual(later, v.message);
   assert.equal(await reason({ ...proof, message: later }, opts()), "message is not the one issued");
   assert.equal(await reason({ ...proof, message: other.message, lock: other.lock }, opts()), "message is not the one issued");
 });
@@ -48,7 +50,7 @@ test("platform checks: domain, account, nonce, chain, age", async () => {
   assert.equal(await reason(proof, opts({ account: "user-43" })), "message is for another account");
   assert.equal(await reason(proof, opts({ nonce: "a1b2c4" })), "message has another nonce");
   assert.equal(await reason(proof, opts({ chain: "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5" })), "message names another chain");
-  const issued = Date.parse("2026-11-04T18:00:00Z");
+  const issued = Date.parse(parseMessage(v.message).issuedAt);
   const at = (s: number) => opts({ now: new Date(issued + s * 1000) });
   assert.equal(await reason(proof, at(601)), "message expired");
   assert.equal(await reason(proof, at(-61)), "message issued in the future");
