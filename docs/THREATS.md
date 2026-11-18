@@ -20,13 +20,15 @@ Each row is an attacker goal, how Ward stops it, and the test that holds it. The
 | Goal | Stopped by | Test |
 | --- | --- | --- |
 | Sign a transaction shaped to favour the attacker, not the canonical proof | The verifier rebuilds the template from `(lock, message)` and requires `template.hash() == tx.hash()`, which pins every raw field: inputs, outputs, outputs data, version and header deps. Only the witness, which carries the signature, is not hashed | `adversarial.test.ts` (every single-field edit of every vector is refused as "not the proof template"), `template.test.ts` |
-| Point the proof input at a cell the attacker can actually spend | The only input is an out point that cannot exist (`tx_hash = ckbhash("CKB lock proof v0\n" || lock hash || message)`, index `0xffffffff`), resolved to `{ capacity u64::MAX, the claimed lock, no type, no data }` (SPEC 3) | `template.test.ts` |
+| Point the proof input at a cell the attacker can actually spend | The only input is an out point that cannot exist (`tx_hash = ckbhash("CKB lock proof v1\n" || lock hash || message)`, index `0xffffffff`), resolved to `{ capacity u64::MAX, the claimed lock, no type, no data }` (SPEC 3) | `template.test.ts` |
+| Have a wallet sign for one of its locks a proof that names another | The output is under the claimed lock, and that lock is part of the signed bytes. A transaction whose output lock is not the lock its out point commits to is the template of no lock, so the verifier refuses it for both | `version.test.ts` |
 | Prove with a key that may move only part of an account | The resolved input carries capacity `u64::MAX`, so a capped or partial-authority key cannot satisfy the lock for the whole | `capped-key.test.ts` |
 
 ## The lock itself
 
 | Goal | Stopped by | Test |
 | --- | --- | --- |
+| Open, without the key, a lock that accepts payments to itself, using the proof's own output | The output is under the claimed lock, so such a lock sees it. anyone-can-pay refuses it twice over: it carries data and holds less than the input. The empty witness probe covers any other lock of this kind | `vectors.test.ts`, `version.test.ts` |
 | Use a lock that opens for anyone (always-success) | After the lock accepts, the verifier re-runs it with an empty witness; if that opens, the proof is refused (`probes`, SPEC 7) | `probes.test.ts`, `vm.test.ts` |
 | Use a witness that does not commit to the message (a password or fixed preimage) | The verifier re-runs the same witness on the template of another message; if that opens, the proof is refused | `probes.test.ts`, `vm.test.ts` |
 | Open an Omnilock as its administrator | An Omnilock with the admin flag (args byte 21, bit 0) is refused before any chain read, because any key on its admin list would open it (SPEC 6) | `verify.test.ts`, `omnilock-admin.test.ts` |

@@ -2,7 +2,7 @@
 
 Status: draft. Prototype, tested on testnet only.
 
-v1 replaces the v0 draft after two reviews. Variant B is gone (section 14). The verifier resolves the proof input with capacity u64::MAX, runs two "no exclusive control" probes, and bounds its own work. Platforms get normative rules (section 9). The bytes a wallet signs for the remaining template did not change, so every v0 variant A proof is a v1 proof, and the domain tag stays `CKB lock proof v0\n` (section 4).
+v1 replaces the v0 draft after two reviews. Variant B is gone (section 14). The verifier resolves the proof input with capacity u64::MAX, runs two "no exclusive control" probes, and bounds its own work. Platforms get normative rules (section 9). On 2026-11-18 the proof output moved under the claimed lock, so a wallet reads from the transaction itself which of its locks is asked to sign. That changed the bytes a wallet signs, and the domain tag became `CKB lock proof v1\n` (section 4).
 
 ## 1. Purpose
 
@@ -55,9 +55,10 @@ The first line follows the shape of EIP-4361 (Sign-In with Ethereum) so it reads
 The only input points at an out point that no transaction can create.
 
 ```text
-TAG = "CKB lock proof v0\n"                    (18 bytes, ASCII, ends with LF)
+TAG = "CKB lock proof v1\n"                    (18 bytes, ASCII, ends with LF)
 P   = ckbhash(TAG || lock hash || message)     (lock hash as 32 raw bytes, message as UTF-8)
 n   = byte length of the message
+s   = byte length of the claimed lock          (32 of code hash, 1 of hash type, its args)
 ```
 
 | Field | Value |
@@ -66,7 +67,7 @@ n   = byte length of the message
 | cell_deps | whatever the lock needs, chosen by the wallet |
 | header_deps | whatever a header-reading lock needs, usually none, chosen by the wallet |
 | inputs | exactly one: `previous_output = { tx_hash: P, index: 0xffffffff }`, `since = 0`, or a value the wallet sets to satisfy a matured absolute time lock |
-| outputs | exactly one: `capacity = (41 + n) * 10^8` shannons, `lock = { code_hash: 0x00 * 32, hash_type: "data", args: 0x }`, no type |
+| outputs | exactly one: `lock` = the claimed lock, `capacity = (8 + s + n) * 10^8` shannons, no type |
 | outputs_data | exactly one: the message bytes |
 | witnesses | exactly one: what the lock needs, as the wallet writes it (usually a `WitnessArgs` with the signature in `lock`) |
 
@@ -76,12 +77,14 @@ Why these values:
 
 - **index 0xffffffff.** No transaction can have 2^32 - 1 outputs within the block size limit, so the out point cannot exist. Nodes refuse the signed proof with `Unknown(OutPoint(...))` (measured with `test_tx_pool_accept` and `estimate_cycles`).
 - **P commits to the tag, the lock and the message.** The tag keeps P apart from any real transaction hash. Another lock or another message gives another transaction, so a signature cannot be moved between them.
-- **The tag is versioned and kept.** It names the bytes of the signed transaction. v1 did not change them, so the tag stays `CKB lock proof v0\n` and v0 proofs keep their hashes. A later change to the signed bytes gets a new tag.
-- **input capacity u64::MAX.** Some locks limit what a key may move in one transaction. The Cellula smart-account lock v6 lets the owner add keys with a per-transaction cap and counts as outflow what leaves the account. v0 resolved the input with capacity 0, so the outflow was only the (41 + n) CKB output, and a key capped at 1,000 CKB could prove the whole account (measured: exit 0). At u64::MAX the same key exits 27, over its cap, and a key with no cap exits 0 (measured, `tests/capped-key.test.ts`). The transaction hash covers out points, not the cells they resolve to, so no signed byte changed: every v0 vector verifies unchanged.
-- **output capacity (41 + n) CKB.** That is the output's occupied capacity: 8 bytes of capacity, 32 of code hash, 1 of hash type, no args, then the data. CCC 1.19 and later raises an output below its occupied capacity to that value while building a transaction, so wallets built on CCC produce this value whatever the template said. The spec fixes it so every implementation builds the same bytes. Measured: the JoyID app signed a 329 CKB output for a 288 byte message.
-- **output lock with an all-zero code hash.** Output locks never run. The output exists so wallets that show outputs show the message.
+- **The tag is versioned.** It names the bytes of the signed transaction. Their first form put the output under a lock with an all-zero code hash, with the tag `CKB lock proof v0\n`. Moving the output under the claimed lock changed them, so the tag is now `CKB lock proof v1\n`, and a signature made for one form does not open the other (measured, `tests/version.test.ts`). A later change to the signed bytes gets a new tag.
+- **input capacity u64::MAX.** Some locks limit what a key may move in one transaction. The Cellula smart-account lock v6 lets the owner add keys with a per-transaction cap and counts as outflow what leaves the account. v0 resolved the input with capacity 0, so the outflow was only the (41 + n) CKB output, and a key capped at 1,000 CKB could prove the whole account (measured: exit 0). At u64::MAX the same key exits 27, over its cap, and a key with no cap exits 0 (measured, `tests/capped-key.test.ts`). The transaction hash covers out points, not the cells they resolve to, so that change touched no signed byte. With the output under the claimed lock, the same lock counts it as staying in the account, and the capped key still exits 27 (the same test runs both forms).
+- **output capacity (8 + s + n) CKB.** That is the output's occupied capacity: 8 bytes of capacity, the lock, then the data. CCC 1.19 and later raises an output below its occupied capacity to that value while building a transaction, so wallets built on CCC produce this value whatever the template said. The spec fixes it so every implementation builds the same bytes. Measured: the JoyID app signed a 352 CKB output for a 289 byte message under its 55 byte lock.
+- **output under the claimed lock.** Output locks never run. The output shows the message to wallets that show outputs, and it names the lock: a wallet with several locks reads from the transaction which one is asked to sign, and a wallet that receives the transaction without the input cell can rebuild that cell from it. The lock is then part of the signed bytes, so a transaction whose output lock is not the lock P commits to is the template of no lock at all (measured, `tests/version.test.ts`). A lock that reads outputs under itself sees this one. anyone-can-pay does, and still refuses without the key: the output carries data and holds less than the input (vector V6).
 
-Signing. The wallet signs as it would any transaction spending a cell under the lock. A signer that needs the input cell (to size the witness placeholder or to find the lock) gets it from the template: CCC's `CellInput` carries `cellOutput` and `outputData` locally. A wallet that insists on looking up inputs on chain cannot sign the proof. The JoyID app signs it (vector V2).
+Signing. The wallet signs as it would any transaction spending a cell under the lock. A signer that needs the input cell (to size the witness placeholder or to find the lock) gets it from the template: CCC's `CellInput` carries `cellOutput` and `outputData` locally. A wallet that receives the transaction without that cell can rebuild it: capacity u64::MAX, the lock of the output, no type, no data. A wallet that insists on looking up inputs on chain cannot sign the proof. The JoyID app signs it (vector V2).
+
+Earlier form. Until 2026-11-18 the output was under `{ code_hash: 0x00 * 32, hash_type: "data", args: 0x }`, its capacity was (41 + n) CKB, and TAG was `CKB lock proof v0\n`. The reference code builds new proofs in the current form only. Its verifier still reads the earlier form (it tries the current form, then the earlier one, and reports which matched) until vectors V10 and V11 are signed again.
 
 ## 5. Verifier algorithm
 
@@ -130,7 +133,7 @@ A proof is untrusted input that makes the verifier read the chain and run code. 
 | witness | 65,536 bytes; a verifier may raise it for a lock with larger signatures | The largest measured is 7,913 (the quantum-resistant lock with one SLH-DSA-SHA2-128s key, V15 and V17). It leaves room for larger post-quantum parameter sets: SLH-DSA 256f is 49,856 bytes by its parameter set (not measured here). |
 | message | 1,024 bytes | Section 3. |
 | each chain read | a timeout, 10 seconds by default | A slow or stalled node would hold the verifier. |
-| each lock run | a cycle limit, 70,000,000 here | The largest proof measured took 12,003,353 cycles (the quantum-resistant lock on mainnet, V17). |
+| each lock run | a cycle limit, 70,000,000 here | The largest saved proof takes 12,240,137 cycles (the quantum-resistant lock on testnet, V15). |
 | request body | platforms cap it; 256 KiB is enough | A proof at every limit above is under 140 KB as JSON. |
 
 ## 8. Replay and expiry
@@ -173,7 +176,7 @@ A verifier only says that a lock accepted one transaction. The rules below are w
 
 A proof is a transaction. A wallet that shows it as one shows an input that does not exist, a u64::MAX amount, and an output holding the message, and the domain line then protects a user only if they read the output data.
 
-Wallets SHOULD detect the proof shape: exactly one input, at index 0xffffffff, whose tx hash equals ckbhash(TAG || the wallet's lock hash || the message in the only output), and exactly one output. `readProof(tx, lock)` in the reference code does this. A wallet that detects it SHOULD show a sign-in request, not a transfer: the domain next to the origin of the site asking (and a warning when they differ), the account, and the chain. It SHOULD NOT show the u64::MAX capacity as an amount being sent: nothing leaves the account.
+Wallets SHOULD detect the proof shape: exactly one input, at index 0xffffffff, whose tx hash equals ckbhash(TAG || the wallet's lock hash || the message in the only output), and exactly one output, under that lock. `readProof(tx, lock)` in the reference code does this. A wallet that detects it SHOULD show a sign-in request, not a transfer: the domain next to the origin of the site asking (and a warning when they differ), the account, and the chain. It SHOULD NOT show the u64::MAX capacity as an amount being sent: nothing leaves the account.
 
 ## 11. VM and consensus
 
@@ -199,31 +202,31 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 
 ## 13. Locks tested
 
-All on testnet unless the row says MAINNET, under the v1 rules (input at u64::MAX, both probes on): V5 to V8 and the Omnilock administrator rows on 2026-11-05, V12 to V17 on 2026-11-06, the rest on 2026-11-04. "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
+All on testnet unless the row says MAINNET, under the v1 rules (input at u64::MAX, both probes on): V5 to V8 and the Omnilock administrator rows on 2026-11-05, V12 to V17 on 2026-11-06, the rest on 2026-11-04. V1 to V9 and V12 to V17 were signed again on 2026-11-18 in the current form of the proof (section 4), and their rows give those runs. V10 and V11 are still in the earlier form. "Vector" means the signed proof is in `tests/vectors/` and replayed by the test suite; "test" means a test in this repository builds and signs the proof each run; "no" means a script outside this repository ran it once with random keys. Every accepted proof below also passed both probes.
 
 | Lock | Signer | Result | Cycles | Controls, refused | In repo |
 | --- | --- | --- | --- | --- | --- |
-| secp256k1_blake160 | CCC private key signer | accepted | 1,645,417 | wrong key, exit -31 | V1 |
-| secp256k1_blake160, MAINNET (2026-11-05) | CCC private key signer, mainnet cell deps | accepted | 1,653,447 | wrong key -31; flipped signature bit -31; a testnet platform, message names another chain | V9 |
+| secp256k1_blake160 | CCC private key signer | accepted | 1,631,945 | wrong key, exit -31 | V1 |
+| secp256k1_blake160, MAINNET (2026-11-05) | CCC private key signer, mainnet cell deps | accepted | 1,656,592 | wrong key -31; flipped signature bit -31; a testnet platform, message names another chain | V9 |
 | JoyID, main key, MAINNET (signed 2026-11-04) | JoyID app (app.joyid.dev), mainnet cell deps | accepted | 6,809,238 | flipped signature bit 11; another message 12; empty witness 4 | V11 |
-| JoyID, main key | JoyID app (testnet.joyid.dev) | accepted | 6,905,201 | flipped signature bit, exit 11 | V2 |
+| JoyID, main key | JoyID app (testnet.joyid.dev) | accepted | 6,817,974 | flipped signature bit, exit 11 | V2 |
 | JoyID, sub key (2026-11-06) | JoyID app on a second device, through CCC's JoyID signer | accepted | 6,957,775 | flipped signature bit 11; the sub key list from before the device was added 13; the CoTA cell that list lived in, refused as not live | V10 |
-| Cellula smart account, starter | software P-256 key, wallet's WebAuthn shape | accepted | 6,736,588 | wrong key, exit 26 | V3 |
-| Cellula smart account, guarded | software P-256 key | accepted | 6,880,395 | wrong key 26; no Config Cell 21; forged Config Cell refused by rule 1 | V4 |
+| Cellula smart account, starter | software P-256 key, wallet's WebAuthn shape | accepted | 6,791,602 | wrong key, exit 26 | V3 |
+| Cellula smart account, guarded | software P-256 key | accepted | 6,947,050 | wrong key 26; no Config Cell 21; forged Config Cell refused by rule 1 | V4 |
 | Cellula smart account, guarded, with per-transaction caps | software P-256 keys, Config Cell fabricated in a local node stub | key with no cap accepted; keys capped at 100 and 1,000 CKB refused, exit 27 | about 6.8 million | key not in the Config Cell, exit 26 | test |
 | Cellula smart account, starter and guarded | the Cellula wallet's own screen (testnet build, 2026-11-05): virtual passkeys, and one real phone passkey through the Cellula app | accepted | 6,750,745 to 6,900,939 | same nonce again; another account; another domain; signature byte 265 flipped, exit 26 | no |
-| multisig 2-of-3 | CCC multisig signer, 2 members | accepted | 3,143,655 | one signature only -11; one key twice -52; a member and a non-member -52; flipped signature bit -52 | V5 |
-| anyone-can-pay | CCC private key signer | accepted | 1,610,026 | no signature -44; another key -31; flipped signature bit -31 | V6 |
-| Omnilock, Dogecoin mode | CCC Doge signer | accepted | 1,462,047 | another key -31; flipped signature bit -31 | V7 |
-| Omnilock, Ethereum mode (2026-11-06), the lock CCC gives MetaMask | CCC EVM signer, the wallet's personal_sign done in software | accepted | 1,476,174 | another key -31; flipped signature bit -31 | V12 |
-| Omnilock, Bitcoin mode (2026-11-06), the lock CCC gives UniSat and OKX | CCC BTC signer, the wallet's message signing done in software | accepted | 1,454,872 | another key -31; flipped signature bit -31 | V13 |
-| PW-lock (2026-11-06), the lock Portal Wallet gave MetaMask users | CCC EVM signer (keccak256 sighash), the wallet's personal_sign done in software | accepted | 1,708,567 | another key -31; flipped signature bit -11 | V14 |
-| PW-lock, MAINNET (2026-11-06) | as above, mainnet cell deps | accepted | 1,693,674 | another key -31; flipped signature bit -11 | V16 |
-| Quantum-resistant lock (2026-11-06), Quantum Purse's deployment, one SLH-DSA-SHA2-128s key | software key, signed over the input at u64::MAX | accepted | 11,831,311 | another key 105; flipped signature bit 107 | V15 |
-| Quantum-resistant lock, MAINNET (2026-11-06) | as above, mainnet cell deps | accepted | 12,003,353 | another key 105; flipped signature bit 107 | V17 |
+| multisig 2-of-3 | CCC multisig signer, 2 members | accepted | 3,114,457 | one signature only -11; one key twice -52; a member and a non-member -52; flipped signature bit -52 | V5 |
+| anyone-can-pay | CCC private key signer | accepted | 1,621,193 | no signature -2; another key -31; flipped signature bit -31 | V6 |
+| Omnilock, Dogecoin mode | CCC Doge signer | accepted | 1,455,308 | another key -31; flipped signature bit -31 | V7 |
+| Omnilock, Ethereum mode (2026-11-06), the lock CCC gives MetaMask | CCC EVM signer, the wallet's personal_sign done in software | accepted | 1,443,866 | another key -31; flipped signature bit -31 | V12 |
+| Omnilock, Bitcoin mode (2026-11-06), the lock CCC gives UniSat and OKX | CCC BTC signer, the wallet's message signing done in software | accepted | 1,447,682 | another key -31; flipped signature bit -31 | V13 |
+| PW-lock (2026-11-06), the lock Portal Wallet gave MetaMask users | CCC EVM signer (keccak256 sighash), the wallet's personal_sign done in software | accepted | 1,714,274 | another key -31; flipped signature bit -11 | V14 |
+| PW-lock, MAINNET (2026-11-06) | as above, mainnet cell deps | accepted | 1,706,829 | another key -31; flipped signature bit -11 | V16 |
+| Quantum-resistant lock (2026-11-06), Quantum Purse's deployment, one SLH-DSA-SHA2-128s key | software key, signed over the input at u64::MAX | accepted | 12,240,137 | another key 105; flipped signature bit 107 | V15 |
+| Quantum-resistant lock, MAINNET (2026-11-06) | as above, mainnet cell deps | accepted | 11,610,050 | another key 105; flipped signature bit 107 | V17 |
 | Omnilock, administrator mode, CCC's deployment | software keys, admin list cell fabricated in a local node stub | the lock accepts the admin's key (exit 0) and the owner's (exit 0); the verifier refuses both, rule 6 | about 1.5 million | not on the list 59; not on the list, naming the admin -31; no list cell 1 | test |
 | Omnilock, administrator mode, 2022 deployment | as above | the lock accepts the admin's key (exit 0); the owner's stops the VM; the verifier refuses both, rule 6 | about 1.5 million | as above | test |
-| Nostr lock | CCC Nostr signer | accepted | 4,169,370 | another key 26; flipped signature bit 18 | V8 |
+| Nostr lock | CCC Nostr signer | accepted | 4,168,745 | another key 26; flipped signature bit 18 | V8 |
 | JoyID, main key | software P-256 key in JoyID's format | accepted | 6,729,097 | another key, exit 6 | no |
 | always-success, assembled | none | refused by probe (a) | | accepted with the probes off | test |
 | 4 byte password, assembled | the password | refused by probe (b) | | accepted with the probes off; empty witness exit 2 | test |
@@ -244,11 +247,11 @@ The v0 draft had a second template for wallets that look inputs up on chain: a l
 
 ## Appendix: test vectors
 
-Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points (V9, V11, V16 and V17: mainnet), and every vector is valid only while they stay live. Expected results are from ckb-debugger 1.1.1 with deps read from testnet on 2026-11-04 (V1 to V4), 2026-11-05 (V5 to V8) and 2026-11-06 (V12 to V17, mainnet for V16 and V17). V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4); the signed bytes are the v0 ones.
+Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points (V9, V11, V16 and V17: mainnet), and every vector is valid only while they stay live. V1 to V9 and V12 to V17 were signed on 2026-11-18 in the current form of the proof, and their expected results are from ckb-debugger 1.1.1 with deps read that day. V10 (2026-11-06) and V11 (2026-11-04) are still in the earlier form of section 4, and their file says so by having no `version`. V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4).
 
 ### V1. secp256k1
 
-File: `tests/vectors/secp256k1.json`. Default CKB lock (secp256k1_blake160_sighash_all). Random key made for the test, signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-04.
+File: `tests/vectors/secp256k1.json`. Default CKB lock (secp256k1_blake160_sighash_all). Random key made for the test, signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-04. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -256,26 +259,26 @@ Lock:
 {
   "codeHash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
   "hashType": "type",
-  "args": "0xb8770a9bf89f93afbc373f0bd9971da6695ff899"
+  "args": "0x88ee5dbbe07c2bf2a854f9167c61fb4c974e0c4b"
 }
 ```
 
-Lock hash: `0xd883ff1552061fbad61555ed77a9782620ce62c378551a7f945eab50f3827bed`
+Lock hash: `0x8a461d0118feb3e806513fe881f86ab2502ab4065c6386b380bd66cad2d92120`
 
 Message (268 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-42
-Lock hash: 0xd883ff1552061fbad61555ed77a9782620ce62c378551a7f945eab50f3827bed
+Lock hash: 0x8a461d0118feb3e806513fe881f86ab2502ab4065c6386b380bd66cad2d92120
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-04T18:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: a1b2c3
 ```
 
-Out point tx hash P: `0xf11278536f43b8d885ecb78a0359836d779fce3ff422eaed31683f9574cd5684`
+Out point tx hash P: `0x779cd7bde9cf9a5788f1fd7fabcb3ff2b32378958341ca35add24ef343d050af`
 
-Transaction hash: `0x88c2695622e1a94ba45cbcfadbd273fd0f869b4c3110d7195e861d4e2beb63f4`
+Transaction hash: `0x5a892db90a7f5192dee9a10893acaeab739e0a6162c0605d9e1e4fb6f2726df7`
 
 Signed transaction (CCC JSON, camelCase):
 
@@ -295,7 +298,7 @@ Signed transaction (CCC JSON, camelCase):
   "inputs": [
     {
       "previousOutput": {
-        "txHash": "0xf11278536f43b8d885ecb78a0359836d779fce3ff422eaed31683f9574cd5684",
+        "txHash": "0x779cd7bde9cf9a5788f1fd7fabcb3ff2b32378958341ca35add24ef343d050af",
         "index": "0xffffffff"
       },
       "since": "0x0"
@@ -303,35 +306,35 @@ Signed transaction (CCC JSON, camelCase):
   ],
   "outputs": [
     {
-      "capacity": "0x731c89500",
+      "capacity": "0x7a8fe2900",
       "lock": {
-        "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-        "hashType": "data",
-        "args": "0x"
+        "codeHash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+        "hashType": "type",
+        "args": "0x88ee5dbbe07c2bf2a854f9167c61fb4c974e0c4b"
       }
     }
   ],
   "outputsData": [
-    "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d34320a4c6f636b20686173683a203078643838336666313535323036316662616436313535356564373761393738323632306365363263333738353531613766393435656162353066333832376265640a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30345431383a30303a30305a0a4e6f6e63653a20613162326333"
+    "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d34320a4c6f636b20686173683a203078386134363164303131386665623365383036353133666538383166383661623235303261623430363563363338366233383062643636636164326439323132300a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d31385432303a30303a30305a0a4e6f6e63653a20613162326333"
   ],
   "witnesses": [
-    "0x550000001000000055000000550000004100000052fd4821af2bd4c650be0af49b365f5109bd273cf59770780bbfd6b8173eb1f424bc33e053adba1dd037deaf48a61e8f6305b3ae455a5074c4fcfede8c0ed47001"
+    "0x550000001000000055000000550000004100000012016793879450239438cb74d52a57938313f87f1a3ad6e709b2c0b7daa6f5a80d7e5ea25612c1ac01809f1f7b98dc12cad3f73b0cf07e043f679ea6357983ee01"
   ]
 }
 ```
 
 Expected:
 
-- the proof: accepted, 1,645,417 cycles
+- the proof: accepted, 1,631,945 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31
-- bit 0 of witness byte 30 (inside the signature) flipped: lock exit -31
+- bit 0 of witness byte 30 (inside the signature) flipped: lock exit -11 (`ERROR_SECP_RECOVER_PUBKEY`: with this signature the changed bytes recover no key; when they recover another key the exit is -31)
 - `controls.wrongKey` (another key signed): lock exit -31
 - probe (a), the same transaction with an empty witness: lock exit -2; probe (b) is the other-message line above
 - `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
 
 ### V2. JoyID, real app
 
-File: `tests/vectors/joyid.json`. JoyID app on testnet (testnet.joyid.dev), main key, through @ckb-ccc/joy-id 1.2.6 CkbSigner.signOnlyTransaction. 2026-11-04.
+File: `tests/vectors/joyid.json`. JoyID app on testnet (testnet.joyid.dev), main key, through @ckb-ccc/joy-id 1.2.6 CkbSigner.signOnlyTransaction. 2026-11-04. Signed again on 2026-11-18 in the current form of the proof: the same account, in the JoyID app on a phone, through an unmodified CCC JoyId.CkbSigner.
 
 Lock:
 
@@ -345,20 +348,20 @@ Lock:
 
 Lock hash: `0xd9d177037d0888e09330bf0dd18e98c534ea3479b4376911d0a5279ead21e0f8`
 
-Message (288 bytes):
+Message (289 bytes):
 
 ```text
 cellula.id wants you to prove control of a CKB lock.
-Account: joyid-test-A
+Account: ward-joyid-test
 Lock hash: 0xd9d177037d0888e09330bf0dd18e98c534ea3479b4376911d0a5279ead21e0f8
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-04T16:44:14.683Z
-Nonce: 0x3b7247621cd1f86d
+Issued at: 2026-11-18T20:59:07.443Z
+Nonce: 08675c52b2cfa57d
 ```
 
-Out point tx hash P: `0x272911bef4b4f8f0f5a42a03d97183ccbcb3514ed06466aaf74f3230aa396441`
+Out point tx hash P: `0xb8ff23810403f5c534388e90d7aa1832ffea0d3aa4c96376cc65de4bf56ba4f1`
 
-Transaction hash: `0x2fb5758ab82e92261e19339db183a377d4bb7b3bf7189268c58e5169e28a514b`
+Transaction hash: `0xb235d219797456851194605cb88fc8524e5f9be0d1309a34337850192fb20b09`
 
 Signed transaction (CCC JSON, camelCase):
 
@@ -406,7 +409,103 @@ Signed transaction (CCC JSON, camelCase):
   "inputs": [
     {
       "previousOutput": {
-        "txHash": "0x272911bef4b4f8f0f5a42a03d97183ccbcb3514ed06466aaf74f3230aa396441",
+        "txHash": "0xb8ff23810403f5c534388e90d7aa1832ffea0d3aa4c96376cc65de4bf56ba4f1",
+        "index": "0xffffffff"
+      },
+      "since": "0x0"
+    }
+  ],
+  "outputs": [
+    {
+      "capacity": "0x832156000",
+      "lock": {
+        "codeHash": "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac",
+        "hashType": "type",
+        "args": "0x000140911fa94eaef8c1d0eca81b23e1972ecb0548dc"
+      }
+    }
+  ],
+  "outputsData": [
+    "0x63656c6c756c612e69642077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20776172642d6a6f7969642d746573740a4c6f636b20686173683a203078643964313737303337643038383865303933333062663064643138653938633533346561333437396234333736393131643061353237396561643231653066380a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d31385432303a35393a30372e3434335a0a4e6f6e63653a2030383637356335326232636661353764"
+  ],
+  "witnesses": [
+    "0x6f010000100000006f0100006f0100005b01000001768ba2ab3ab54eb7f1a4c3f76ba1d6f1cf1532301ce310b77326e46b2e673086adaca74912a2cfa32ca0de2c3e4a77b4e386d11b36675d3f4b6734bc9490ffbf1333a513bca9394bcc3e468e4d1b1970314c4c43f3b5f491d8591aab4fcbd883752edba1af824f9005a3a9d7ca69f879d13d34b7c9a2883ca9c41c5a06bbf8a22b8b05e1f0303efb898fe4d6de601198c7a7b864abbe6a21c73b2e787e187c521d000000007b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224d5456694d324e6c4f57466b4d324d794e6a55354f444a6a4e54557a4d445269597a51334e5745354d5463774d6d4e694d3259795a4463304d544e684e6d55795957526d5a6a63314e446c6d4d444a6c4f4755795951222c226f726967696e223a2268747470733a2f2f746573746e65742e6a6f7969642e646576222c2263726f73734f726967696e223a66616c73657d"
+  ]
+}
+```
+
+Expected:
+
+- the proof: accepted, 6,817,974 cycles
+- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 12
+- bit 0 of witness byte 95 (inside the signature) flipped: lock exit 11
+- probe (a), the same transaction with an empty witness: lock exit 4; probe (b) is the other-message line above
+- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
+
+### V3. Cellula smart account (starter)
+
+File: `tests/vectors/smart-account-starter.json`. Cellula smart-account lock v6 on testnet, starter form (args 0x01 0xfe blake160(key)). Software P-256 key signing in the wallet's WebAuthn shape. 2026-11-04. Signed again on 2026-11-18 in the current form of the proof, with a new random key (the code cell is `0x71805f82…:0` since the lock's in-place upgrade of 2026-11-06, ckb-smart-account #2).
+
+Lock:
+
+```json
+{
+  "codeHash": "0x8f73d5d875b70c248c281052c9f67e2d7a2dbbee47a1ae71e68f44fed47b436e",
+  "hashType": "type",
+  "args": "0x01fe3b3c30a7c4e727ec89dbdd50f9e1f4209e18797d"
+}
+```
+
+Lock hash: `0x3ce4c0ab9982772480b2f3bec8e480f1d6b6cfb41735b739711c12d1f1bbbcec`
+
+Message (266 bytes):
+
+```text
+dao.example wants you to prove control of a CKB lock.
+Account: user-b2
+Lock hash: 0x3ce4c0ab9982772480b2f3bec8e480f1d6b6cfb41735b739711c12d1f1bbbcec
+Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
+Issued at: 2026-11-18T20:00:00Z
+Nonce: n-b2
+```
+
+Out point tx hash P: `0xff004fca53faf7a416bc0fd2193c3d36344f0404947716a7ed890a8ab4a7b185`
+
+Transaction hash: `0x69dbc99cbc87f8232f4311d2348ae8739e90202a0835bd92070bc9b049efc7bd`
+
+Signed transaction (CCC JSON, camelCase):
+
+```json
+{
+  "version": "0x0",
+  "cellDeps": [
+    {
+      "outPoint": {
+        "txHash": "0x71805f825021a3592c4d3cb8e0e8a372e62bfe45696d5abca35cd015e7dbfc1c",
+        "index": "0x0"
+      },
+      "depType": "code"
+    },
+    {
+      "outPoint": {
+        "txHash": "0x98df7ead4a08964a086d07fe04ee93a2fb91670616e1b42ae9f405db358d3586",
+        "index": "0x1"
+      },
+      "depType": "code"
+    },
+    {
+      "outPoint": {
+        "txHash": "0x98df7ead4a08964a086d07fe04ee93a2fb91670616e1b42ae9f405db358d3586",
+        "index": "0x2"
+      },
+      "depType": "code"
+    }
+  ],
+  "headerDeps": [],
+  "inputs": [
+    {
+      "previousOutput": {
+        "txHash": "0xff004fca53faf7a416bc0fd2193c3d36344f0404947716a7ed890a8ab4a7b185",
         "index": "0xffffffff"
       },
       "since": "0x0"
@@ -416,120 +515,24 @@ Signed transaction (CCC JSON, camelCase):
     {
       "capacity": "0x7a8fe2900",
       "lock": {
-        "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-        "hashType": "data",
-        "args": "0x"
+        "codeHash": "0x8f73d5d875b70c248c281052c9f67e2d7a2dbbee47a1ae71e68f44fed47b436e",
+        "hashType": "type",
+        "args": "0x01fe3b3c30a7c4e727ec89dbdd50f9e1f4209e18797d"
       }
     }
   ],
   "outputsData": [
-    "0x63656c6c756c612e69642077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a206a6f7969642d746573742d410a4c6f636b20686173683a203078643964313737303337643038383865303933333062663064643138653938633533346561333437396234333736393131643061353237396561643231653066380a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30345431363a34343a31342e3638335a0a4e6f6e63653a20307833623732343736323163643166383664"
+    "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d62320a4c6f636b20686173683a203078336365346330616239393832373732343830623266336265633865343830663164366236636662343137333562373339373131633132643166316262626365630a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d31385432303a30303a30305a0a4e6f6e63653a206e2d6232"
   ],
   "witnesses": [
-    "0x6f010000100000006f0100006f0100005b01000001768ba2ab3ab54eb7f1a4c3f76ba1d6f1cf1532301ce310b77326e46b2e673086adaca74912a2cfa32ca0de2c3e4a77b4e386d11b36675d3f4b6734bc9490ffbfb36740a3d4cbfa798d31258285a274ab6265708656350a6779625fe8194dca43ec6fb2faf416c74e5bfd1020b50ff1a98909c42ba56f18357a4ecab55004141a2b8b05e1f0303efb898fe4d6de601198c7a7b864abbe6a21c73b2e787e187c521d000000007b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224e6a426c4f574a6d59324532597a646d5a47466a4e544d334d6d5a694f5751774d444a6a4d6a68695a6a51795a5455784e4745355932466d4d4759344e7a6b314d546778596d59324d3249774d4441334e6a677a4d41222c226f726967696e223a2268747470733a2f2f746573746e65742e6a6f7969642e646576222c2263726f73734f726967696e223a66616c73657d"
+    "0x180200001000000018020000180200000402000000000200002526d5dde39a746b395b080806a8e2838aeef5b1377771cc4e5eec74ffaa9384050500000000007e7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a226b706a427a587050635146726a6e6959644948517268343352506f2d70656e3773357658485964346d7967222c226f726967696e223a2268747470733a2f2f77616c6c65742e746573746e65742e63656c6c756c612e6964227d3635bf032ea0a70fa3607983e68712fb51c0a0db972407e4e2303b07f9e1b7a860029eeaf2457bfc05fe9af6bdcc3b9e29f99a8a557596af5a899959dc609a684eb5d05d90ae33ef4c7818b431dd404738c4f5623f3dc216a469e50314bc25455d3dcf313f766128f630a12655668daae1713caa179d1bbf51b47ed65cf0367700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
   ]
 }
 ```
 
 Expected:
 
-- the proof: accepted, 6,905,201 cycles
-- the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 12
-- bit 0 of witness byte 95 (inside the signature) flipped: lock exit 11
-- probe (a), the same transaction with an empty witness: lock exit 4; probe (b) is the other-message line above
-- `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
-
-### V3. Cellula smart account (starter)
-
-File: `tests/vectors/smart-account-starter.json`. Cellula smart-account lock v6 on testnet, starter form (args 0x01 0xfe blake160(key)). Software P-256 key signing in the wallet's WebAuthn shape. 2026-11-04. Signed again on 2026-11-06: the lock's in-place upgrade (ckb-smart-account #2) spent its old code cell `0xbd1e24a9…:0`, so the dep now names `0x71805f82…:0`. Same messages, accounts and keys.
-
-Lock:
-
-```json
-{
-  "codeHash": "0x8f73d5d875b70c248c281052c9f67e2d7a2dbbee47a1ae71e68f44fed47b436e",
-  "hashType": "type",
-  "args": "0x01fe06239af86a9f4f0469a249ad9fc6df2cb1a3949d"
-}
-```
-
-Lock hash: `0xa61e6ae7be13a2ad287517b3fe280ee7c4c0893f6440a5864ae82e17bbcb4ce8`
-
-Message (266 bytes):
-
-```text
-dao.example wants you to prove control of a CKB lock.
-Account: user-b2
-Lock hash: 0xa61e6ae7be13a2ad287517b3fe280ee7c4c0893f6440a5864ae82e17bbcb4ce8
-Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-04T18:00:00Z
-Nonce: n-b2
-```
-
-Out point tx hash P: `0x281844304af76c1c6a5d0d958b1886591976721dd3cedd2de0f90b724a9331a1`
-
-Transaction hash: `0x21f54ad35284519263adf02cb298d2f448462e829b0b19dc08a748811ed19807`
-
-Signed transaction (CCC JSON, camelCase):
-
-```json
-{
-  "version": "0x0",
-  "cellDeps": [
-    {
-      "outPoint": {
-        "txHash": "0x71805f825021a3592c4d3cb8e0e8a372e62bfe45696d5abca35cd015e7dbfc1c",
-        "index": "0x0"
-      },
-      "depType": "code"
-    },
-    {
-      "outPoint": {
-        "txHash": "0x98df7ead4a08964a086d07fe04ee93a2fb91670616e1b42ae9f405db358d3586",
-        "index": "0x1"
-      },
-      "depType": "code"
-    },
-    {
-      "outPoint": {
-        "txHash": "0x98df7ead4a08964a086d07fe04ee93a2fb91670616e1b42ae9f405db358d3586",
-        "index": "0x2"
-      },
-      "depType": "code"
-    }
-  ],
-  "headerDeps": [],
-  "inputs": [
-    {
-      "previousOutput": {
-        "txHash": "0x281844304af76c1c6a5d0d958b1886591976721dd3cedd2de0f90b724a9331a1",
-        "index": "0xffffffff"
-      },
-      "since": "0x0"
-    }
-  ],
-  "outputs": [
-    {
-      "capacity": "0x725dcd300",
-      "lock": {
-        "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-        "hashType": "data",
-        "args": "0x"
-      }
-    }
-  ],
-  "outputsData": [
-    "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d62320a4c6f636b20686173683a203078613631653661653762653133613261643238373531376233666532383065653763346330383933663634343061353836346165383265313762626362346365380a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30345431383a30303a30305a0a4e6f6e63653a206e2d6232"
-  ],
-  "witnesses": [
-    "0x180200001000000018020000180200000402000000000200002526d5dde39a746b395b080806a8e2838aeef5b1377771cc4e5eec74ffaa9384050500000000007e7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a226571427873763641756855764f492d4c5968792d4c6452514843584e546a7357633474497a596e4b573359222c226f726967696e223a2268747470733a2f2f77616c6c65742e746573746e65742e63656c6c756c612e6964227da3805b0d3cbb721be936bbfe9d1f07890e1e422f7e80dae2157cd98dffbf2fb39650a42f8162cf67fa9f7671feb65cdecbc3bcf93730229e3e897dc03455bc7f8ee1fce9780a66291decfa20ba6b581eac988bd4169d017c877cc6a8ee071971251d516bee7c82e99df07b202583541beca863f3712b19f729cb39ace3bfd95000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-  ]
-}
-```
-
-Expected:
-
-- the proof: accepted, 6,736,588 cycles
+- the proof: accepted, 6,791,602 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 26
 - bit 0 of witness byte 265 (inside the signature) flipped: lock exit 26
 - `controls.wrongKey` (another key signed): lock exit 26
@@ -538,7 +541,7 @@ Expected:
 
 ### V4. Cellula smart account (guarded)
 
-File: `tests/vectors/smart-account-guarded.json`. Cellula smart-account lock v6 on testnet, guarded form (32 byte args, authenticators in a live Config Cell given as a cell dep). Software P-256 key as authenticator 0. 2026-11-04. Signed again on 2026-11-06: the lock's in-place upgrade (ckb-smart-account #2) spent its old code cell `0xbd1e24a9…:0`, so the dep now names `0x71805f82…:0`. Same messages, accounts and keys.
+File: `tests/vectors/smart-account-guarded.json`. Cellula smart-account lock v6 on testnet, guarded form (32 byte args, authenticators in a live Config Cell given as a cell dep). Software P-256 key as authenticator 0. 2026-11-04. Signed again on 2026-11-18 in the current form of the proof, with another account: a test wallet made through the Cellula wallet's own screens, whose software passkey is authenticator 0 of its live Config Cell (the code cell is `0x71805f82…:0` since the lock's in-place upgrade of 2026-11-06, ckb-smart-account #2).
 
 Lock:
 
@@ -546,26 +549,26 @@ Lock:
 {
   "codeHash": "0x8f73d5d875b70c248c281052c9f67e2d7a2dbbee47a1ae71e68f44fed47b436e",
   "hashType": "type",
-  "args": "0x5d4646d76d06f56b57dbd848cbb0fd06ef7d0f67213d7c1ce02350fd73022934"
+  "args": "0xa0f23939addf955759cd4c99a8c589e07d5d1b98e8eae80dc8d73dc6e433b033"
 }
 ```
 
-Lock hash: `0xb8533a06c264468007fa63c83d89e9d92dd326da1df59c9e266f690695869f7c`
+Lock hash: `0x035c47d97f878d22318b0890a2e181d35c276855d718a60dd1cd71108dae89c8`
 
 Message (264 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-b
-Lock hash: 0xb8533a06c264468007fa63c83d89e9d92dd326da1df59c9e266f690695869f7c
+Lock hash: 0x035c47d97f878d22318b0890a2e181d35c276855d718a60dd1cd71108dae89c8
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-04T18:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-b
 ```
 
-Out point tx hash P: `0x3db1e6ab06f6cca101059dc32426aa2e11a3a702a731c613e2e10a1edc1b16cb`
+Out point tx hash P: `0xd79285ec2e3750dbda1d6b7bd85b59159362123b613f008a37f7a5f32cc4d8a6`
 
-Transaction hash: `0x00c259f92caeb3073da25c53254261e478e20f9a0f83a91466d56c7adbc0ed4d`
+Transaction hash: `0xa5fd2b846036b0667855f795b46a2d295b46df5f9c9630e8e6afd243295d3dc1`
 
 Signed transaction (CCC JSON, camelCase):
 
@@ -596,8 +599,8 @@ Signed transaction (CCC JSON, camelCase):
     },
     {
       "outPoint": {
-        "txHash": "0x59ef1e1f6f0bbc3dd4419a98e3dab3e0d2d2a6305f7c6b620a90c9eaf00bcc39",
-        "index": "0x2"
+        "txHash": "0xb83886a360d55834ec094d844cf2c0788ee5b46f8eff2b2bc98f111d9a69f442",
+        "index": "0x0"
       },
       "depType": "code"
     }
@@ -606,7 +609,7 @@ Signed transaction (CCC JSON, camelCase):
   "inputs": [
     {
       "previousOutput": {
-        "txHash": "0x3db1e6ab06f6cca101059dc32426aa2e11a3a702a731c613e2e10a1edc1b16cb",
+        "txHash": "0xd79285ec2e3750dbda1d6b7bd85b59159362123b613f008a37f7a5f32cc4d8a6",
         "index": "0xffffffff"
       },
       "since": "0x0"
@@ -614,26 +617,26 @@ Signed transaction (CCC JSON, camelCase):
   ],
   "outputs": [
     {
-      "capacity": "0x719f11100",
+      "capacity": "0x7d8ad3100",
       "lock": {
-        "codeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-        "hashType": "data",
-        "args": "0x"
+        "codeHash": "0x8f73d5d875b70c248c281052c9f67e2d7a2dbbee47a1ae71e68f44fed47b436e",
+        "hashType": "type",
+        "args": "0xa0f23939addf955759cd4c99a8c589e07d5d1b98e8eae80dc8d73dc6e433b033"
       }
     }
   ],
   "outputsData": [
-    "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d620a4c6f636b20686173683a203078623835333361303663323634343638303037666136336338336438396539643932646433323664613164663539633965323636663639303639353836396637630a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d30345431383a30303a30305a0a4e6f6e63653a206e2d62"
+    "0x64616f2e6578616d706c652077616e747320796f7520746f2070726f766520636f6e74726f6c206f66206120434b42206c6f636b2e0a4163636f756e743a20757365722d620a4c6f636b20686173683a203078303335633437643937663837386432323331386230383930613265313831643335633237363835356437313861363064643163643731313038646165383963380a436861696e3a203078313036333965303839353530326235363838613662653863663639343630643736353431626661343832313632396438366436326261306161653366393630360a4973737565642061743a20323032362d31312d31385432303a30303a30305a0a4e6f6e63653a206e2d62"
   ],
   "witnesses": [
-    "0x180200001000000018020000180200000402000000000200002526d5dde39a746b395b080806a8e2838aeef5b1377771cc4e5eec74ffaa9384050500000000007e7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a226c354532306b4633784c524c7546397174566f6754436361554a6e4f4d5557695053376c67395537634d4d222c226f726967696e223a2268747470733a2f2f77616c6c65742e746573746e65742e63656c6c756c612e6964227db07706b4b987f4128dce211584525fb7a99ea2bdf47992f2e5e7b5868daf1dd5c8657725d2e2915972f6cb3e82b425d519bd7798cb5fa89883cf83cade3af7169832dc810af76967bf86778f5770546aab1826d5650ca2dd397964da03d624b37d2cd4018a677bca40c88f5301036d59ecdd0e7f215c1bc10d7c507d2f97ddb800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    "0x180200001000000018020000180200000402000000000200002526d5dde39a746b395b080806a8e2838aeef5b1377771cc4e5eec74ffaa9384050500000000007e7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22535741746e77437a5838506c744a2d38756c7159573859554934362d36554a2d5948495864554d724a4b45222c226f726967696e223a2268747470733a2f2f77616c6c65742e746573746e65742e63656c6c756c612e6964227df221c6146080b1e76a1f007af7b57acdd51ffc8e7defc1c6929dcb0b0703cff7949a56edce5f68158d115660fd152e501ec86441709242a4ca350dd876587bfb3f922f5ea6c43abbb4eb5a67b69929813ddf3ae4ff53be06a4d3566507a3718720d527fe455a7ea2bc3562837cd7fbc6dc4fce5561694477b6ff553be492f95000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
   ]
 }
 ```
 
 Expected:
 
-- the proof: accepted, 6,880,395 cycles
+- the proof: accepted, 6,947,050 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 26
 - bit 0 of witness byte 265 (inside the signature) flipped: lock exit 26
 - `controls.wrongKey` (another key signed): lock exit 26
@@ -644,7 +647,7 @@ Expected:
 
 ### V5. secp256k1 multisig, 2 of 3
 
-File: `tests/vectors/multisig.json`. secp256k1 multisig, 2 of 3 members (CCC `Secp256k1MultisigV2`, `hash_type` data1). Three random keys made for the test; members 0 and 2 signed with an unmodified CCC SignerMultisigCkbPrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-05.
+File: `tests/vectors/multisig.json`. secp256k1 multisig, 2 of 3 members (CCC `Secp256k1MultisigV2`, `hash_type` data1). Three random keys made for the test; members 0 and 2 signed with an unmodified CCC SignerMultisigCkbPrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-05. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -652,32 +655,32 @@ Lock:
 {
   "codeHash": "0x36c971b8d41fbd94aabca77dc75e826729ac98447b46f91e00796155dddb0d29",
   "hashType": "data1",
-  "args": "0xf802e80ecc4c78fed3b8bbe8cdb7eb95db108087"
+  "args": "0xdd461f7d49231caef43a5099e73e926979b6c100"
 }
 ```
 
-Lock hash: `0x7edc09c63cbc4a31a4accf4ce73609390670956c519b1023aa790e4e1d34d513`
+Lock hash: `0xafde357355c67058bcc30eca8f9d22a4a1fb18de03a971e6013c407d06a212b2`
 
 Message (266 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-ms
-Lock hash: 0x7edc09c63cbc4a31a4accf4ce73609390670956c519b1023aa790e4e1d34d513
+Lock hash: 0xafde357355c67058bcc30eca8f9d22a4a1fb18de03a971e6013c407d06a212b2
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-05T12:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-ms
 ```
 
-Out point tx hash P: `0xa355a13ea6dd735b939988f53169961745a3df530f2fc3f089572acfc53e4754`
+Out point tx hash P: `0x342f7ce32fe75eb9f8f9685aade5072ac53eae2771b9d3cec167c9ff0c63ac2d`
 
-Transaction hash: `0x7103e88d47d02b2614cafd61f1d135b932c4dab3f94ced8463825113278eca82`
+Transaction hash: `0x99441715c7d90b993e7c3bf65a54b1f3c9a067a3d22e264728b0547a96a58009`
 
 Cell deps: the multisig dep group `0x2eefdeb21f3a3edf697c28a52601b4419806ed60bb427420455cc29a090b26d5:0`.
 
 Expected:
 
-- the proof: accepted, 3,143,655 cycles
+- the proof: accepted, 3,114,457 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -52 (`ERROR_VERIFICATION`, the recovered key is not a member)
 - bit 0 of witness byte 124 (in the s half of signature 0) flipped: lock exit -52
 - `controls.oneSignature` (member 0 alone, the second slot left as zeros, as CCC leaves it): lock exit -11 (`ERROR_SECP_RECOVER_PUBKEY` on the empty second slot)
@@ -689,7 +692,7 @@ Expected:
 
 ### V6. anyone-can-pay
 
-File: `tests/vectors/anyone-can-pay.json`. anyone-can-pay lock with the owner's key hash as args and no minimums. Random key made for the test, signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction), which signs anyone-can-pay inputs of its key. Testnet, 2026-11-05.
+File: `tests/vectors/anyone-can-pay.json`. anyone-can-pay lock with the owner's key hash as args and no minimums. Random key made for the test, signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction), which signs anyone-can-pay inputs of its key. Testnet, 2026-11-05. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -697,42 +700,42 @@ Lock:
 {
   "codeHash": "0x3419a1c09eb2567f6552ee7a8ecffd64155cffe0f1796e6e61ec088d740c1356",
   "hashType": "type",
-  "args": "0x7cedbdb76a9575c711cdfd80c3527e2860c6dc83"
+  "args": "0xabbbf73f1fac20c13caac6abe85d94de2fbfe259"
 }
 ```
 
-Lock hash: `0xcdebf3a1bd32f07a56f80d26f3a08a407275cbe9167b7ca673422251ca654bcb`
+Lock hash: `0x63a3ad448352566c0fa0d2b0ed81238e4ca676f1c7da1f5864d30d8222853234`
 
 Message (268 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-acp
-Lock hash: 0xcdebf3a1bd32f07a56f80d26f3a08a407275cbe9167b7ca673422251ca654bcb
+Lock hash: 0x63a3ad448352566c0fa0d2b0ed81238e4ca676f1c7da1f5864d30d8222853234
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-05T12:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-acp
 ```
 
-Out point tx hash P: `0x2d20b60eb3b42e5eb419a7af928bf95c9126afed7ae1113528fbdb6e1e46d3d5`
+Out point tx hash P: `0x9790ea28afcd35ce83f7bcfed17590c6f0d984394538d236e2c28e1780b5b6a7`
 
-Transaction hash: `0x9a9d9d90622c6fc31ad11b5ad3c062fa322962a7834d37ed2cab561955c723ce`
+Transaction hash: `0x54f366d153ccaca690c31478ef8039a56d5f26a8fa4405cbd40dca4c03d37ad6`
 
 Cell deps: the anyone-can-pay dep group `0xec26b0f85ed839ece5f11c4c4e837ec359f5adc4420410f6453b1f6b60fb96a6:0`.
 
 Expected:
 
-- the proof: accepted, 1,610,026 cycles
+- the proof: accepted, 1,621,193 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31 (`ERROR_PUBKEY_BLAKE160_HASH`)
 - bit 0 of witness byte 60 (in the s half of the signature) flipped: lock exit -31
 - `controls.wrongKey` (another key signed the same sighash): lock exit -31
-- `controls.noSignature` (empty witness): lock exit -44 (`ERROR_NO_PAIR`: with no signature the lock takes its payment path, and the template has no output under the lock to pair the input with). The same empty witness on a transaction whose only output is under the lock and holds u64::MAX exits 0; the template check refuses that transaction (rule 2)
+- `controls.noSignature` (empty witness): lock exit -2 (`ERROR_ENCODING`: with no signature the lock takes its payment path and pairs the input with the template's output, which is under the same lock; that output carries the message, and the path allows no data on a cell with no type). The capacity closes the path as well: with the data removed, the output holds less than the input and the lock exits -42 (`ERROR_OUTPUT_AMOUNT_NOT_ENOUGH`). The same empty witness on a transaction whose only output is under the lock, has no data and holds u64::MAX exits 0; the template check refuses that transaction (rule 2)
 - probe (a), the same transaction with an empty witness: the `noSignature` line above
 - `test_tx_pool_accept` on the signed transaction: refused, `Unknown(OutPoint(<P>ffffffff))`
 
 ### V7. Omnilock, Dogecoin mode
 
-File: `tests/vectors/omnilock-doge.json`. Omnilock with a Dogecoin identity (flag 0x05, no Omnilock modes). Random key made for the test, signed with an unmodified CCC SignerDogePrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-05.
+File: `tests/vectors/omnilock-doge.json`. Omnilock with a Dogecoin identity (flag 0x05, no Omnilock modes). Random key made for the test, signed with an unmodified CCC SignerDogePrivateKey (prepareTransaction, signOnlyTransaction). Testnet, 2026-11-05. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -740,32 +743,32 @@ Lock:
 {
   "codeHash": "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb",
   "hashType": "type",
-  "args": "0x050ffa745d9c337cf15ef4ee5b5dc8672ea19b3fa900"
+  "args": "0x05cec4b5a19c6b3bdbe5e7e171417bc01917b8b25700"
 }
 ```
 
-Lock hash: `0x4bc158c10fca14a6cca6e5273ea5db0bb3d06ad0b3b508bb5aa48a910f6ef2c3`
+Lock hash: `0xb59fc9f560dcc145b41edd766e582062a626d3994cc4ce59f2a5ac2482e12d41`
 
 Message (270 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-doge
-Lock hash: 0x4bc158c10fca14a6cca6e5273ea5db0bb3d06ad0b3b508bb5aa48a910f6ef2c3
+Lock hash: 0xb59fc9f560dcc145b41edd766e582062a626d3994cc4ce59f2a5ac2482e12d41
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-05T12:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-doge
 ```
 
-Out point tx hash P: `0x8411e47ff60f74930665baf4e1661f2ce96fc5433beaca09dbcf425da97190b0`
+Out point tx hash P: `0x2794071300c7a13711deedcf7935148dc2d621fd217b771e1c8a448baa9961a6`
 
-Transaction hash: `0x55b606e6d199884215b75ebd906ee9f04362af2f26520a31d62a5a2db8e33c3e`
+Transaction hash: `0x902b26d868fbc9b9d6b5723cdfe004b6cbc32492e8fd35cbcd15a4d21115c894`
 
 Cell deps: the secp256k1 dep group `0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37:0` and the Omnilock code cell `0xec18bf0d857c981c3d1f4e17999b9b90c484b303378e94de1a57b0872f5d4602:0`.
 
 Expected:
 
-- the proof: accepted, 1,462,047 cycles
+- the proof: accepted, 1,455,308 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31 (`ERROR_IDENTITY_PUBKEY_BLAKE160_HASH`)
 - bit 0 of witness byte 80 (in the s half of the signature) flipped: lock exit -31
 - `controls.wrongKey` (another Dogecoin key signed): lock exit -31
@@ -774,7 +777,7 @@ Expected:
 
 ### V8. Nostr lock
 
-File: `tests/vectors/nostr.json`. Nostr lock (CCC `NostrLock`, no proof of work). Random key made for the test, signed with an unmodified CCC SignerNostrPrivateKey (prepareTransaction, signOnlyTransaction). The witness lock is a signed Nostr event, as JSON, with the sighash in a `ckb_sighash_all` tag. Testnet, 2026-11-05.
+File: `tests/vectors/nostr.json`. Nostr lock (CCC `NostrLock`, no proof of work). Random key made for the test, signed with an unmodified CCC SignerNostrPrivateKey (prepareTransaction, signOnlyTransaction). The witness lock is a signed Nostr event, as JSON, with the sighash in a `ckb_sighash_all` tag. Testnet, 2026-11-05. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -782,32 +785,32 @@ Lock:
 {
   "codeHash": "0x6ae5ee0cb887b2df5a9a18137315b9bdc55be8d52637b2de0624092d5f0c91d5",
   "hashType": "type",
-  "args": "0x0038acc98818377c58e8e189f484e09a4a896a5814"
+  "args": "0x0027327da10f1cf62fc702f2097e8d8f12585890a3"
 }
 ```
 
-Lock hash: `0x3ac94bc0a8ef71ca2455f07dc04dfa5b835ea42a9dbef4c98a70db487b65efc6`
+Lock hash: `0x2e1f0b9e3b96741726f2674345373665ebd023bda41a703efe8a523797a2ddf9`
 
 Message (272 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-nostr
-Lock hash: 0x3ac94bc0a8ef71ca2455f07dc04dfa5b835ea42a9dbef4c98a70db487b65efc6
+Lock hash: 0x2e1f0b9e3b96741726f2674345373665ebd023bda41a703efe8a523797a2ddf9
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-05T12:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-nostr
 ```
 
-Out point tx hash P: `0x3dfe2a707bc10ad2e9e1fc9703819b6a36c811f82829322e054f97ca7376953b`
+Out point tx hash P: `0xdf2bceabc0ed823a590faba90e02887da9ad4b5495d0e393c48297e55c788da2`
 
-Transaction hash: `0x8e9e64c5fb4efee64483a9e9d67130631c619995cc0b5d0ea3caf7359e9140c8`
+Transaction hash: `0x362fd749f66a29ecdb793da8be926b24ff1dfdfae30829c3eeaa3147b5256b94`
 
 Cell deps: the Nostr lock code cell `0xa2a434dcdbe280b9ed75bb7d6c7d68186a842456aba0fc506657dc5ed7c01d68:0`.
 
 Expected:
 
-- the proof: accepted, 4,169,370 cycles
+- the proof: accepted, 4,168,745 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 11 (`SighashAllMismatched`)
 - bit 0 of witness byte 526 flipped (a hex digit of the signature's s half, `c` to `b`, so the event still parses): lock exit 18 (`ValidationFail`)
 - `controls.wrongKey` (another Nostr key signed): lock exit 26 (`PubkeyNotFound`, the event's author is not the lock's key)
@@ -816,7 +819,7 @@ Expected:
 
 ### V9. secp256k1, mainnet
 
-File: `tests/vectors/mainnet-secp256k1.json`. Default CKB lock on mainnet. Random key made for the test (no funds, never used again), signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction) against mainnet's cell deps, 2026-11-05.
+File: `tests/vectors/mainnet-secp256k1.json`. Default CKB lock on mainnet. Random key made for the test (no funds, never used again), signed with an unmodified CCC SignerCkbPrivateKey (prepareTransaction, signOnlyTransaction) against mainnet's cell deps, 2026-11-05. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -824,32 +827,32 @@ Lock:
 {
   "codeHash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
   "hashType": "type",
-  "args": "0x72a976a719667c6cd49f633d669e1c6623500041"
+  "args": "0xb12b0484873c510ce4a7e3fb9c174c8742f283fc"
 }
 ```
 
-Lock hash: `0x5cc6ed103d09f6c25703f012b04253ca3d08124cac7824c5ded5d0de6ea5ad12`
+Lock hash: `0x954107250caeb22e5778334e592fa89ea6a15ad4085aec2c0b3b9404e1a6c86e`
 
-Message (272 bytes):
+Message (268 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-42
-Lock hash: 0x5cc6ed103d09f6c25703f012b04253ca3d08124cac7824c5ded5d0de6ea5ad12
+Lock hash: 0x954107250caeb22e5778334e592fa89ea6a15ad4085aec2c0b3b9404e1a6c86e
 Chain: 0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5
-Issued at: 2026-11-05T22:00:00.000Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: m1b2c3
 ```
 
-Out point tx hash P: `0x2fad38281cca96dd4ffc4651aea60ffbb06debd91fd98c335776712373dc0e09`
+Out point tx hash P: `0x6ca0d10b16f2562ead49722372bf789b3c5dcc3fe5b3edd7006bcb6a77cfa40e`
 
-Transaction hash: `0x16d6d554e7054dcee3ea340e7456392b05d00b89ddd9bdaa6828d448b4a9e866`
+Transaction hash: `0x221116a5bc0b23a37cf36ae7a007ec0c48142d06a9304b69f89d688a7fcd95be`
 
 Cell deps: mainnet's secp256k1 dep group `0x71a7ba8fc96349fea0ed3a5c47992e3b4084b031a42264a018e0072e8172e46c:0`.
 
 Expected, against mainnet (ckb-debugger, and `ward-vm` under mainnet's consensus, which agree):
 
-- the proof: accepted, 1,653,447 cycles
+- the proof: accepted, 1,656,592 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31
 - bit 0 of witness byte 30 flipped: lock exit -31
 - `controls.wrongKey` (a second random key signed): lock exit -31
@@ -943,7 +946,7 @@ Expected, against mainnet (ckb-debugger, and `ward-vm` under mainnet's consensus
 
 ### V12. Omnilock, Ethereum mode (MetaMask)
 
-File: `tests/vectors/omnilock-ethereum.json`. Omnilock with an Ethereum identity (args 0x12, the address, 0x00), the lock CCC gives an EVM wallet such as MetaMask. Random key made for the test. CCC's `SignerEvm` prepares the transaction and places the signature; the wallet's part, `personal_sign` of `CKB transaction: <sighash>`, is done by ethers' `Wallet.signMessage`, the same algorithm. The MetaMask app itself was not driven. 2026-11-06.
+File: `tests/vectors/omnilock-ethereum.json`. Omnilock with an Ethereum identity (args 0x12, the address, 0x00), the lock CCC gives an EVM wallet such as MetaMask. Random key made for the test. CCC's `SignerEvm` prepares the transaction and places the signature; the wallet's part, `personal_sign` of `CKB transaction: <sighash>`, is done by ethers' `Wallet.signMessage`, the same algorithm. The MetaMask app itself was not driven. 2026-11-06. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -951,32 +954,32 @@ Lock:
 {
   "codeHash": "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb",
   "hashType": "type",
-  "args": "0x122b22a5a98ad1c0d46b1360d6c60deccf6004b44400"
+  "args": "0x1252777140f05ce2db61925c740032f0d7d951f7fd00"
 }
 ```
 
-Lock hash: `0x0046ff35b3e6f119a6dcaa86f21f42935e9a753dafcd20539604dde81ecb26a8`
+Lock hash: `0x306450aa5f0528e0c2a18da57c6d826d1700854730d0eed37244a0faef43a8a5`
 
 Message (268 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-evm
-Lock hash: 0x0046ff35b3e6f119a6dcaa86f21f42935e9a753dafcd20539604dde81ecb26a8
+Lock hash: 0x306450aa5f0528e0c2a18da57c6d826d1700854730d0eed37244a0faef43a8a5
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-06T12:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-evm
 ```
 
-Out point tx hash P: `0x93faecfb0cc4bdea432b439ea97473af8ee6445c780ccb3c666af684fb1a1d12`
+Out point tx hash P: `0x46b1df790e63c1bdb792c9a2317741c45fa7d35d879c31d0c8da8158934ec4a8`
 
-Transaction hash: `0xdb64b4fd7dca7906adb9ee80938c1fa4f62d942ee607889be4314cf9771d43b9`
+Transaction hash: `0x55ba799cd7163c19dc444c5e07133787711e5663c838cb59f179629e4b72a750`
 
 Cell deps: the secp256k1 dep group `0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37:0` and the Omnilock code cell `0xec18bf0d857c981c3d1f4e17999b9b90c484b303378e94de1a57b0872f5d4602:0`, as CCC's testnet known scripts name them.
 
 Expected:
 
-- the proof: accepted, 1,476,174 cycles
+- the proof: accepted, 1,443,866 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31 (`ERROR_IDENTITY_PUBKEY_BLAKE160_HASH`)
 - bit 0 of witness byte 80 (in the s half of the signature) flipped: lock exit -31
 - `controls.wrongKey` (another Ethereum key signed for this lock): lock exit -31
@@ -985,7 +988,7 @@ Expected:
 
 ### V13. Omnilock, Bitcoin mode (UniSat, OKX)
 
-File: `tests/vectors/omnilock-bitcoin.json`. Omnilock with a Bitcoin identity (args 0x04, hash160 of the compressed key, 0x00), the lock CCC gives a Bitcoin wallet such as UniSat or OKX. Random key made for the test. CCC's `SignerBtc` prepares the transaction and places the signature; the wallet's part, ECDSA message signing of `CKB (Bitcoin Layer) transaction: <sighash>` with the Bitcoin message prefix, is done in software with the same algorithm. The wallet apps themselves were not driven. 2026-11-06.
+File: `tests/vectors/omnilock-bitcoin.json`. Omnilock with a Bitcoin identity (args 0x04, hash160 of the compressed key, 0x00), the lock CCC gives a Bitcoin wallet such as UniSat or OKX. Random key made for the test. CCC's `SignerBtc` prepares the transaction and places the signature; the wallet's part, ECDSA message signing of `CKB (Bitcoin Layer) transaction: <sighash>` with the Bitcoin message prefix, is done in software with the same algorithm. The wallet apps themselves were not driven. 2026-11-06. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -993,32 +996,32 @@ Lock:
 {
   "codeHash": "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb",
   "hashType": "type",
-  "args": "0x042d53c358503ee728399394ab00a15846b05d85e800"
+  "args": "0x045ab5c5b4dc355234aef88b409aef02950cabf9a200"
 }
 ```
 
-Lock hash: `0x126a5e0697b8ba3a145a31aaf6663ca0e6f7c5b139e88efb4fff26ffe0ea8d7d`
+Lock hash: `0xed52b28187564f43b42eb964f7f25fde074b67915a93b929c7331cd5d3439545`
 
 Message (268 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-btc
-Lock hash: 0x126a5e0697b8ba3a145a31aaf6663ca0e6f7c5b139e88efb4fff26ffe0ea8d7d
+Lock hash: 0xed52b28187564f43b42eb964f7f25fde074b67915a93b929c7331cd5d3439545
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-06T12:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-btc
 ```
 
-Out point tx hash P: `0xb3dde1b6b12369766a51a9ff11a389e8f3b9e90758dd8279472f1c7d16ea18e1`
+Out point tx hash P: `0xe8877f838786d78073d1bf1bc94946c26f7a062ee1f938ce538011d5eb98ab73`
 
-Transaction hash: `0x8e51155c1445556c6385cea5b3bced0cc0e54587ada4bf04d30ec88fd8b70812`
+Transaction hash: `0xb95d6837887ebabf4c9c2b9bab46c298931387d9048f79174265e7b245ed905d`
 
 Cell deps: the secp256k1 dep group `0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37:0` and the Omnilock code cell `0xec18bf0d857c981c3d1f4e17999b9b90c484b303378e94de1a57b0872f5d4602:0`, as CCC's testnet known scripts name them.
 
 Expected:
 
-- the proof: accepted, 1,454,872 cycles
+- the proof: accepted, 1,447,682 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31 (`ERROR_IDENTITY_PUBKEY_BLAKE160_HASH`)
 - bit 0 of witness byte 80 (in the s half of the signature) flipped: lock exit -31
 - `controls.wrongKey` (another Bitcoin key signed for this lock): lock exit -31
@@ -1027,7 +1030,7 @@ Expected:
 
 ### V14. PW-lock (Portal Wallet)
 
-File: `tests/vectors/pw-lock.json`. PW-lock with an Ethereum address as args, the lock Portal Wallet gave MetaMask users. Random key made for the test. CCC's `SignerEvm` prepares the transaction and places the signature: it hashes the transaction with keccak256, and the wallet's part, `personal_sign` of those 32 bytes, is done by ethers' `Wallet.signMessage`, the same algorithm. The MetaMask app itself was not driven. 2026-11-06.
+File: `tests/vectors/pw-lock.json`. PW-lock with an Ethereum address as args, the lock Portal Wallet gave MetaMask users. Random key made for the test. CCC's `SignerEvm` prepares the transaction and places the signature: it hashes the transaction with keccak256, and the wallet's part, `personal_sign` of those 32 bytes, is done by ethers' `Wallet.signMessage`, the same algorithm. The MetaMask app itself was not driven. 2026-11-06. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -1035,32 +1038,32 @@ Lock:
 {
   "codeHash": "0x58c5f491aba6d61678b7cf7edf4910b1f5e00ec0cde2f42e0abb4fd9aff25a63",
   "hashType": "type",
-  "args": "0xc004c0e0fec9205b402f19431fac7a04025fc6d5"
+  "args": "0xe7cdf7ad2619d3b5d0163ee7dd7673da3939ea56"
 }
 ```
 
-Lock hash: `0x9fc41db1f4ca40961fa7c1f97692eedc108b8857339240f151f863049a5a10c3`
+Lock hash: `0x9169449b8a9c581a7d0e952d45c429eeef92ace6d94c36345b364e1809bb4de9`
 
 Message (266 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-pw
-Lock hash: 0x9fc41db1f4ca40961fa7c1f97692eedc108b8857339240f151f863049a5a10c3
+Lock hash: 0x9169449b8a9c581a7d0e952d45c429eeef92ace6d94c36345b364e1809bb4de9
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-06T12:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-pw
 ```
 
-Out point tx hash P: `0x3cda4407f57ca2e6e7909a3640213069c82ebb8a898eeb26e83c86b1b7d0be38`
+Out point tx hash P: `0xc0e34040ea5e03b30fdf3eef30428afdbfeba61632c7f3a573d8b0d2d973786e`
 
-Transaction hash: `0xa684c5c39279c89f585ad7915fb10f725feb5c5fb7cdff7be13937c6eb5d09c9`
+Transaction hash: `0x67bc94f23d2de1493df5740fbcf294771cb310dc2190f3fdebae717390529ef0`
 
 Cell deps: the secp256k1 dep group `0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37:0` and the PW-lock code cell `0x57a62003daeab9d54aa29b944fc3b451213a5ebdf2e232216a3cfed0dde61b38:0`, as CCC's testnet known scripts name them.
 
 Expected:
 
-- the proof: accepted, 1,708,567 cycles
+- the proof: accepted, 1,714,274 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31
 - bit 0 of witness byte 30 (in the signature) flipped: lock exit -11
 - `controls.wrongKey` (another key signed for this lock): lock exit -31
@@ -1069,7 +1072,7 @@ Expected:
 
 ### V15. Quantum-resistant lock (Quantum Purse)
 
-File: `tests/vectors/quantum-lock.json`. The quantum-resistant lock (nervosnetwork/quantum-resistant-lock-script) with one SLH-DSA-SHA2-128s key, at the deployment Quantum Purse and the Cellula SDK both name. Random key made for the test. This lock's message covers the input cells, so the signature is made over the template's input as the verifier resolves it (capacity u64::MAX, no type, no data), with the Cellula SDK's `pqTxMessageAll` and `@noble/post-quantum`. No wallet app was driven. 2026-11-06.
+File: `tests/vectors/quantum-lock.json`. The quantum-resistant lock (nervosnetwork/quantum-resistant-lock-script) with one SLH-DSA-SHA2-128s key, at the deployment Quantum Purse and the Cellula SDK both name. Random key made for the test. This lock's message covers the input cells, so the signature is made over the template's input as the verifier resolves it (capacity u64::MAX, no type, no data), with the Cellula SDK's `pqTxMessageAll` and `@noble/post-quantum`. No wallet app was driven. 2026-11-06. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -1077,32 +1080,32 @@ Lock:
 {
   "codeHash": "0x147ecbb5c5127d982ee1362d2c2bb4267803da2eb006d150e88af6caaa0a7eaf",
   "hashType": "data1",
-  "args": "0x02af6a5fc237287b5588ec19452db8f7fab084c192e7b4a31cc4a855f5ffef59"
+  "args": "0xbb668d5a90c33b38e00732f353c656479430d4ecee5d8e728ce19ca70a7a712e"
 }
 ```
 
-Lock hash: `0x5e1499c68c0d351ce3c59cc52da9a2a43aa2d3f9f08bd0b006c50e9104e95ba3`
+Lock hash: `0x1bb7716c7bee122d4e3e8e555ea4867e4b44951241e8093263b16be9316bb0fd`
 
 Message (266 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-pq
-Lock hash: 0x5e1499c68c0d351ce3c59cc52da9a2a43aa2d3f9f08bd0b006c50e9104e95ba3
+Lock hash: 0x1bb7716c7bee122d4e3e8e555ea4867e4b44951241e8093263b16be9316bb0fd
 Chain: 0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606
-Issued at: 2026-11-06T12:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-pq
 ```
 
-Out point tx hash P: `0x5892f325570e2fd763e11fe6eb8a6021432f2ad0572b158fe56f7eba7fabf03a`
+Out point tx hash P: `0x8dc8a925a2c046c993b0045049bd93929e84e23f758a82df9a4762465e3f4ed4`
 
-Transaction hash: `0xa39483866b8d58040858273b6175e2a5088fd1d66ca3065882aa14742fcd8c7a`
+Transaction hash: `0x2c9d971960447862da2df0a670c16e21ea4ca6f394ae93dc5d83f73cd5f04613`
 
 Cell deps: the lock's code cell `0x631d9a6049fb1fc3790e89d9daf35abe535b5e754cd8c3404319319710f0b106:0`, referred to by data hash (`data1`), as Quantum Purse's testnet build names it.
 
 Expected:
 
-- the proof: accepted, 11,831,311 cycles
+- the proof: accepted, 12,240,137 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 107
 - bit 0 of witness byte 100 (in the signature) flipped: lock exit 107
 - `controls.wrongKey` (another key signed for this lock): lock exit 105
@@ -1111,7 +1114,7 @@ Expected:
 
 ### V16. PW-lock, mainnet
 
-File: `tests/vectors/mainnet-pw-lock.json`. PW-lock with an Ethereum address as args, the lock Portal Wallet gave MetaMask users. Random key made for the test. CCC's `SignerEvm` prepares the transaction and places the signature: it hashes the transaction with keccak256, and the wallet's part, `personal_sign` of those 32 bytes, is done by ethers' `Wallet.signMessage`, the same algorithm. The MetaMask app itself was not driven. Mainnet cell deps, read only, nothing sent. 2026-11-06.
+File: `tests/vectors/mainnet-pw-lock.json`. PW-lock with an Ethereum address as args, the lock Portal Wallet gave MetaMask users. Random key made for the test. CCC's `SignerEvm` prepares the transaction and places the signature: it hashes the transaction with keccak256, and the wallet's part, `personal_sign` of those 32 bytes, is done by ethers' `Wallet.signMessage`, the same algorithm. The MetaMask app itself was not driven. Mainnet cell deps, read only, nothing sent. 2026-11-06. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -1119,32 +1122,32 @@ Lock:
 {
   "codeHash": "0xbf43c3602455798c1a61a596e0d95278864c552fafe231c063b3fabf97a8febc",
   "hashType": "type",
-  "args": "0xc5f0d30c1be64a373a7b0badbcca85ce4c013b50"
+  "args": "0x6b74ad4dd6f6471b16fc2690e453426c995127cd"
 }
 ```
 
-Lock hash: `0xa0f4a16186d9ed9d63e837dd48c17e02706232dc48c012760168591e5f16c1fe`
+Lock hash: `0xbf6889a43871918cce6078994b9877a414fd061a1a786c88aaba2601c9915351`
 
 Message (266 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-pw
-Lock hash: 0xa0f4a16186d9ed9d63e837dd48c17e02706232dc48c012760168591e5f16c1fe
+Lock hash: 0xbf6889a43871918cce6078994b9877a414fd061a1a786c88aaba2601c9915351
 Chain: 0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5
-Issued at: 2026-11-06T12:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-pw
 ```
 
-Out point tx hash P: `0x37661cd16744f2c9073fbc111581ce6e94e2dae67b81128e3e633239e1857cd4`
+Out point tx hash P: `0x7c057012c6b0428e0ad3b9405c937f467805b5e9216c6be0b6315877b10aab57`
 
-Transaction hash: `0x0062b4c1d201d8fe3a8be24cf06704b9616ae4b90703683d67d79dfe8cde54fd`
+Transaction hash: `0x48238144c0129394ce891995c6fa7c11bb7a8dcc84a803dcde3fb8ae2022b890`
 
-Cell deps: the secp256k1 dep group `0x71a7ba8fc96349fea0ed3a5c47992e3b4084b031a42264a018e0072e8172e46c:0` and the PW-lock code cell `0x1d60cb8f4666e039f418ea94730b1a8c5aa0bf2f7781474406387462924d15d4:0`, as CCC's mainnet known scripts name them.
+Cell deps: the secp256k1 dep group `0x71a7ba8fc96349fea0ed3a5c47992e3b4084b031a42264a018e0072e8172e46c:0` and the PW-lock code cell `0x7534a9800b6722342044d4449693470560a13c37f8e560dfc0a82d6639be7f4b:0`, as CCC's mainnet known scripts name them.
 
 Expected:
 
-- the proof: accepted, 1,693,674 cycles
+- the proof: accepted, 1,706,829 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit -31
 - bit 0 of witness byte 30 (in the signature) flipped: lock exit -11
 - `controls.wrongKey` (another key signed for this lock): lock exit -31
@@ -1153,7 +1156,7 @@ Expected:
 
 ### V17. Quantum-resistant lock, mainnet
 
-File: `tests/vectors/mainnet-quantum-lock.json`. The quantum-resistant lock (nervosnetwork/quantum-resistant-lock-script) with one SLH-DSA-SHA2-128s key, at the deployment Quantum Purse and the Cellula SDK both name. Random key made for the test. This lock's message covers the input cells, so the signature is made over the template's input as the verifier resolves it (capacity u64::MAX, no type, no data), with the Cellula SDK's `pqTxMessageAll` and `@noble/post-quantum`. No wallet app was driven. Mainnet cell deps, read only, nothing sent. 2026-11-06.
+File: `tests/vectors/mainnet-quantum-lock.json`. The quantum-resistant lock (nervosnetwork/quantum-resistant-lock-script) with one SLH-DSA-SHA2-128s key, at the deployment Quantum Purse and the Cellula SDK both name. Random key made for the test. This lock's message covers the input cells, so the signature is made over the template's input as the verifier resolves it (capacity u64::MAX, no type, no data), with the Cellula SDK's `pqTxMessageAll` and `@noble/post-quantum`. No wallet app was driven. Mainnet cell deps, read only, nothing sent. 2026-11-06. Signed again on 2026-11-18 in the current form of the proof, with a new random key.
 
 Lock:
 
@@ -1161,32 +1164,32 @@ Lock:
 {
   "codeHash": "0x302d35982f865ebcbedb9a9360e40530ed32adb8e10b42fbbe70d8312ff7cedf",
   "hashType": "type",
-  "args": "0x9182cdcdbba4cda67e27ea6b811ddd74a1226f4c1141a464369180cc0205fc34"
+  "args": "0xece80dbdb04f83b7fc10105208165a4bb7e51fbd0c27bc7cd5ea4d5ad703bfda"
 }
 ```
 
-Lock hash: `0xc376267e210555bc803fd2e30375a2b50b601853d3dd9c89fbf5605be6abdab4`
+Lock hash: `0xbf7726cdd362b3f9da46248f0a442b01489c9e984182288e3b59c9b2f28befed`
 
 Message (266 bytes):
 
 ```text
 dao.example wants you to prove control of a CKB lock.
 Account: user-pq
-Lock hash: 0xc376267e210555bc803fd2e30375a2b50b601853d3dd9c89fbf5605be6abdab4
+Lock hash: 0xbf7726cdd362b3f9da46248f0a442b01489c9e984182288e3b59c9b2f28befed
 Chain: 0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5
-Issued at: 2026-11-06T12:00:00Z
+Issued at: 2026-11-18T20:00:00Z
 Nonce: n-pq
 ```
 
-Out point tx hash P: `0xbb2b7a17b8eb087eabb7c47bad48e8614ee6bef0f368eed785ac3a5a4bfb02ef`
+Out point tx hash P: `0x580b04f6f9ab8587931b7361d201aa954c61629c72463b3656c2b8a843e79873`
 
-Transaction hash: `0x37a883e5a4ce051ff0b9d522c7876de3a88f05e8a6041ffef4f0aa2f681af3b5`
+Transaction hash: `0x50c8585c71c573973ae3fc68f1c055fc7e81368f24021abdd4c05830ef4e46fe`
 
 Cell deps: the lock's code cell `0x4598d00df2f3dc8bc40eee38689a539c94f6cc3720b7a2a6746736daa60f500a:0`; the lock refers to it by type id (`0x302d3598…`), as Quantum Purse's mainnet build names it. On testnet the code is an older build (V15), so this vector is the one that runs the code mainnet depositors use.
 
 Expected:
 
-- the proof: accepted, 12,003,353 cycles
+- the proof: accepted, 11,610,050 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 107
 - bit 0 of witness byte 100 (in the signature) flipped: lock exit 107
 - `controls.wrongKey` (another key signed for this lock): lock exit 105

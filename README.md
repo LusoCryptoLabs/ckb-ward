@@ -48,7 +48,7 @@ The DAO voting example is a full reference platform for the rules of section 9 o
 
 ## How it works
 
-- The only input points at an out point that cannot exist: `tx_hash = ckbhash("CKB lock proof v0\n" || lock hash || message)`, `index = 0xffffffff`. The verifier resolves it to `{ capacity u64::MAX, the claimed lock }`, so a key that may only move part of an account cannot prove it. One output under an all-zero lock carries the message.
+- The only input points at an out point that cannot exist: `tx_hash = ckbhash("CKB lock proof v1\n" || lock hash || message)`, `index = 0xffffffff`. The verifier resolves it to `{ capacity u64::MAX, the claimed lock }`, so a key that may only move part of an account cannot prove it. One output under the claimed lock carries the message, so a wallet reads from the transaction which of its locks is asked to sign.
 - The message names the platform, the account, the lock hash, the chain's genesis hash, the time and a single-use nonce.
 - After the lock accepts, the verifier runs it twice more, with an empty witness and with the same witness on another message. A lock that opens either way is open to anyone, and the proof is refused.
 - An Omnilock in administrator mode is refused: any key on its admin list opens it, the owner's lock included.
