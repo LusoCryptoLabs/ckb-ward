@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
 import { parseMessage, type MessageFields } from "./message.ts";
 import type { LockRun, MockCell, MockTransaction, RunLock } from "./lock.ts";
-import { PROOF_INPUT_CAPACITY, proofTemplate, proofVersion, type ProofVersion } from "./template.ts";
+import { PROOF_INPUT_CAPACITY, proofTemplate } from "./template.ts";
 
 /** What the prover hands in: the lock it claims, the message it was asked to sign, the signed tx. */
 export interface Proof {
@@ -68,8 +68,6 @@ export type VerifyResult =
        * (a key rotation, a recovery or a lock upgrade spends one, and the owner proves again).
        */
       cellDeps: ccc.OutPoint[];
-      /** Version of the signed bytes the proof uses (0: output under the null lock, 1: under the claimed lock). */
-      version: ProofVersion;
     }
   | { ok: false; reason: string; run?: LockRun };
 
@@ -282,12 +280,12 @@ function probeMessage(message: string): string {
 }
 
 /** The two probes of VerifyOptions.probes. Returns the reason to refuse, or undefined. */
-async function noExclusiveControl(lock: ccc.Script, message: string, version: ProofVersion, tx: ccc.Transaction, deps: MockTransaction["mock_info"]["cell_deps"], headers: unknown[], runLock: RunLock) {
+async function noExclusiveControl(lock: ccc.Script, message: string, tx: ccc.Transaction, deps: MockTransaction["mock_info"]["cell_deps"], headers: unknown[], runLock: RunLock) {
   const empty = tx.clone();
   empty.witnesses = ["0x"];
   const a = await runLock(mockTransaction(empty, proofInput(lock), deps, headers));
   if (a.code === 0) return { reason: "no exclusive control: the lock opens with an empty witness", run: a };
-  const other = proofTemplate(lock, probeMessage(message), { version });
+  const other = proofTemplate(lock, probeMessage(message));
   other.cellDeps = tx.cellDeps.map((d) => d.clone());
   other.headerDeps = [...tx.headerDeps];
   other.inputs[0].since = tx.inputs[0].since;
@@ -329,11 +327,14 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
   const twice = duplicateCellDep(tx.cellDeps);
   if (twice) return fail(`cell dep ${key(twice)} is listed twice`);
 
+  const template = proofTemplate(lock, proof.message);
+  template.cellDeps = tx.cellDeps.map((d) => d.clone());
   // Cell deps, header deps and the input's since are the prover's to fill, like the witness: the
   // verifier copies them from the submitted transaction, so they are not pinned by the hash check.
   // The out point and the output stay pinned, so the proof still commits to the lock and message.
-  const version = proofVersion(tx, lock, proof.message);
-  if (version === undefined) return fail("not the proof template for this lock and message");
+  template.headerDeps = [...tx.headerDeps];
+  template.inputs[0].since = tx.inputs[0].since;
+  if (template.hash() !== tx.hash()) return fail("not the proof template for this lock and message");
 
   // Every check above is free. From here on each step reads the chain or runs the lock.
   if (options.claimNonce && !(await options.claimNonce(fields))) return fail("nonce already used");
@@ -351,10 +352,10 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
   }
   const run = await options.runLock(mockTransaction(tx, proofInput(lock), deps, headers));
   if (run.code === 0) {
-    const probe = options.probes === false ? undefined : await noExclusiveControl(lock, proof.message, version, tx, deps, headers, options.runLock);
+    const probe = options.probes === false ? undefined : await noExclusiveControl(lock, proof.message, tx, deps, headers, options.runLock);
     if (probe) return fail(probe.reason, probe.run);
     const cellDeps = deps.map((d) => ccc.OutPoint.from({ txHash: d.cell_dep.out_point.tx_hash, index: d.cell_dep.out_point.index }));
-    return { ok: true, fields, cycles: run.cycles, cellDeps, version };
+    return { ok: true, fields, cycles: run.cycles, cellDeps };
   }
   if (run.code === null) return fail(`lock did not run: ${run.output.split("\n").at(-1)}`, run);
   return fail(`lock exited ${run.code}`, run);

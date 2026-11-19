@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
 import { PROOF_INPUT_CAPACITY, mockTransaction, proofInput, proofTemplate, resolveCellDeps, verify, type MockTransaction, type VerifyResult } from "../src/index.ts";
-import { NO_NETWORK, NO_VM, expectFor, flipWitnessByte, otherMessage, poolAccept, rpcFor, runLockFor, vectors, versionOf, type Vector } from "./helpers.ts";
+import { NO_NETWORK, NO_VM, expectFor, flipWitnessByte, otherMessage, poolAccept, rpcFor, runLockFor, vectors, type Vector } from "./helpers.ts";
 
 const opts = (v: Vector, message: string) => ({ rpcUrl: rpcFor(v), runLock: runLockFor(v)!, expect: expectFor(message) });
 const show = (r: VerifyResult) => (r.ok ? `ACCEPTED, cycles ${r.cycles}` : `REFUSED, ${r.reason}${r.run?.cycles ? `, cycles ${r.run.cycles}` : ""}`);
@@ -58,7 +58,7 @@ for (const v of vectors) {
     // The lock refuses it as well: the same witness on the other message's template.
     const tx = ccc.Transaction.from(v.tx);
     const other = otherMessage(v.message);
-    const tpl = proofTemplate(v.lock, other, { version: versionOf(v) });
+    const tpl = proofTemplate(v.lock, other);
     tpl.cellDeps = tx.cellDeps;
     tpl.witnesses = tx.witnesses;
     const raw = await runRaw(v, tpl);
@@ -129,9 +129,8 @@ test("anyone-can-pay: the path without a signature is real, and only the templat
   const r = await verify({ lock: v.lock, message: v.message, tx }, { ...opts(v, v.message), runLock: async () => assert.fail("no lock run") });
   assert.match(!r.ok ? r.reason : "", /not the proof template/);
 
-  // Version 1 puts the template's output under the claimed lock, so the payment path sees it. Two
-  // things the template fixes keep that path shut, each measured alone on the opening transaction.
-  assert.equal(versionOf(v), 1);
+  // The template's output is under the claimed lock, so the payment path sees it. Two things the
+  // template fixes keep that path shut, each measured alone on the opening transaction.
   const template = ccc.Transaction.from(c.tx);
   assert.ok(template.outputs[0].lock.eq(ccc.Script.from(v.lock)));
   const withMessage = tx.clone();

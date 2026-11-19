@@ -62,7 +62,7 @@ async function signProof(tx: ccc.Transaction, account: ccc.Script, k: Key, index
   return tx;
 }
 
-for (const version of [0, 1] as const) test(`smart account, version ${version}: a capped key cannot prove the account, an unlimited key can`, { skip: NO_VM }, async (t) => {
+test("smart account: a capped key cannot prove the account, an unlimited key can", { skip: NO_VM }, async (t) => {
   // The real Config Cell of the guarded vector gives the header layout and the auth code hash.
   const real = await jsonRpc(RPC_URL)("get_live_cell", [JsonRpcTransformers.outPointFrom(ccc.Transaction.from(V5.tx).cellDeps[3].outPoint), true]);
   const cb = ccc.bytesFrom(real.cell.data.content);
@@ -85,9 +85,9 @@ for (const version of [0, 1] as const) test(`smart account, version ${version}: 
 
     const results: Record<string, { reason: string; tx: ccc.Transaction; text: string }> = {};
     for (const [name, k, index] of [["unlimited", main, 0], ["cap 100 CKB", cap100, 1], ["cap 1000 CKB", cap1000, 2], ["not in the Config Cell", stranger, 0]] as const) {
-      const nonce = `capped-${version}-${index}-${name.length}`;
+      const nonce = `capped-${index}-${name.length}`;
       const text = message({ domain: "dao.example", account: "acct", lock: account, chain: TESTNET_GENESIS, issuedAt: new Date(), nonce });
-      const tx = proofTemplate(account, text, { version });
+      const tx = proofTemplate(account, text);
       tx.cellDeps = cellDeps.map((d) => d.clone());
       await signProof(tx, account, k, index);
       const r = await verify({ lock: account, message: text, tx }, { rpcUrl: stub.url, runLock: runLock!, expect: expectFor(text, { now: new Date() }) });
@@ -100,11 +100,11 @@ for (const version of [0, 1] as const) test(`smart account, version ${version}: 
     assert.equal(results["not in the Config Cell"].reason, "lock exited 26");
 
     // Precondition, so the refusal above is the fix and not a bad signature: the template output
-    // holds (41 + n) CKB in version 0 (and goes back to the account in version 1), under 1000 CKB, and with the input resolved at capacity 0 (the
-    // old rule) the lock accepts the same 1000 CKB key's proof.
-    const { tx, text } = results["cap 1000 CKB"];
-    const outflow = BigInt(41 + ccc.bytesFrom(text, "utf8").length) * 100000000n;
-    assert.ok(outflow < 1000n * 100000000n);
+    // holds under 1000 CKB and goes back to the account, and with the input resolved at capacity 0
+    // (the old rule) the lock accepts the same 1000 CKB key's proof.
+    const { tx } = results["cap 1000 CKB"];
+    assert.ok(tx.outputs[0].capacity < 1000n * 100000000n);
+    assert.ok(tx.outputs[0].lock.eq(account));
     const deps = await resolveCellDeps(stub.url, tx.cellDeps);
     const zero = proofInput(account);
     zero.output.capacity = "0x0";
