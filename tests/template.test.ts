@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ccc } from "@ckb-ccc/core";
-import { PROOF_INDEX, PROOF_INPUT_CAPACITY, parseMessage, proofOutPoint, proofTemplate, readProof } from "../src/index.ts";
+import { PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG, parseMessage, proofOutPoint, proofTemplate, readProof } from "../src/index.ts";
 import { otherMessage, vectors } from "./helpers.ts";
 
 function rebuild(v: (typeof vectors)[number], message: string): ccc.Transaction {
@@ -23,14 +23,19 @@ for (const v of vectors) {
 }
 
 test("the out point commits to the tag, the lock and the message", () => {
-  const v = vectors.find((x) => x.file === "secp256k1.json")!;
-  const op = proofOutPoint(v.lock, v.message);
-  assert.equal(op.index, BigInt(PROOF_INDEX));
-  const tag = ccc.bytesFrom("CKB lock proof v0\n", "utf8");
-  assert.equal(tag.length, 18);
-  assert.equal(op.txHash, ccc.hashCkb(ccc.bytesConcat(tag, ccc.Script.from(v.lock).hash(), ccc.bytesFrom(v.message, "utf8"))));
-  const out = proofTemplate(v.lock, v.message).outputs[0];
-  assert.equal(out.capacity, BigInt(41 + ccc.bytesFrom(v.message, "utf8").length) * 100000000n);
+  for (const v of vectors) {
+    const op = proofOutPoint(v.lock, v.message);
+    assert.equal(op.index, BigInt(PROOF_INDEX));
+    const tag = ccc.bytesFrom(PROOF_TAG, "utf8");
+    assert.equal(tag.length, 18);
+    assert.equal(op.txHash, ccc.hashCkb(ccc.bytesConcat(tag, ccc.Script.from(v.lock).hash(), ccc.bytesFrom(v.message, "utf8"))), v.file);
+    assert.ok(op.eq(ccc.Transaction.from(v.tx).inputs[0].previousOutput), v.file);
+    // The output is under the claimed lock and holds its occupied capacity: 8 of capacity, the
+    // lock, then the message.
+    const out = ccc.Transaction.from(v.tx).outputs[0];
+    assert.equal(out.capacity, BigInt(8 + ccc.Script.from(v.lock).occupiedSize + ccc.bytesFrom(v.message, "utf8").length) * 100000000n, v.file);
+    assert.ok(out.lock.eq(ccc.Script.from(v.lock)), v.file);
+  }
 });
 
 test("the input carries the cell the verifier resolves: capacity u64::MAX, the lock, no type, no data", () => {

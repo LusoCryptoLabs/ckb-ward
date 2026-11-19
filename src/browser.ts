@@ -1,7 +1,7 @@
 // For a verifier in a browser: everything in the main entry except the runners that start a process
 // (ckbDebugger, wardVm). Nothing it imports reaches a Node built-in. Run locks with ckbVmJs.
 export { MAX_MESSAGE_BYTES, message, parseMessage, type MessageFields, type MessageInput } from "./message.ts";
-export { NULL_LOCK, PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG, proofOutPoint, proofTemplate, readProof, type ProofOptions } from "./template.ts";
+export { PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG, proofOutPoint, proofTemplate, readProof, type ProofOptions } from "./template.ts";
 export {
   CLOCK_SKEW_SECONDS,
   CellDepError,

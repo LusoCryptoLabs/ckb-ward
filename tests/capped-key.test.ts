@@ -99,12 +99,12 @@ test("smart account: a capped key cannot prove the account, an unlimited key can
     assert.equal(results["cap 1000 CKB"].reason, "lock exited 27");
     assert.equal(results["not in the Config Cell"].reason, "lock exited 26");
 
-    // Precondition, so the refusal above is the fix and not a bad signature: the template moves
-    // (41 + n) CKB to the null lock, under 1000 CKB, and with the input resolved at capacity 0 (the
-    // old rule) the lock accepts the same 1000 CKB key's proof.
-    const { tx, text } = results["cap 1000 CKB"];
-    const outflow = BigInt(41 + ccc.bytesFrom(text, "utf8").length) * 100000000n;
-    assert.ok(outflow < 1000n * 100000000n);
+    // Precondition, so the refusal above is the fix and not a bad signature: the template output
+    // holds under 1000 CKB and goes back to the account, and with the input resolved at capacity 0
+    // (the old rule) the lock accepts the same 1000 CKB key's proof.
+    const { tx } = results["cap 1000 CKB"];
+    assert.ok(tx.outputs[0].capacity < 1000n * 100000000n);
+    assert.ok(tx.outputs[0].lock.eq(account));
     const deps = await resolveCellDeps(stub.url, tx.cellDeps);
     const zero = proofInput(account);
     zero.output.capacity = "0x0";

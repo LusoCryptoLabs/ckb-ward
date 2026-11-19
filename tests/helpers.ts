@@ -16,6 +16,8 @@ export interface Vector {
   name: string;
   /** The chain the proof was signed for and its cell deps live on. Default testnet. */
   network?: "testnet" | "mainnet";
+  /** Version of the signed bytes, the digit in PROOF_TAG. */
+  version: 1;
   about: string;
   lock: ccc.ScriptLike;
   message: string;

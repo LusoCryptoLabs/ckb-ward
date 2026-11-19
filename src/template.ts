@@ -3,10 +3,10 @@ import { parseMessage, type MessageFields } from "./message.ts";
 
 /**
  * Domain separation for the proof out point. 18 bytes, ends with a line feed. It names the bytes of
- * the signed transaction, which have not changed since v0, so it stays as it is and old proofs
- * keep their hashes. A change to those bytes gets a new tag.
+ * the signed transaction: a change to those bytes gets a new tag. v1 is the output under the
+ * claimed lock; v0 had it under a lock with an all-zero code hash and is no longer accepted.
  */
-export const PROOF_TAG = "CKB lock proof v0\n";
+export const PROOF_TAG = "CKB lock proof v1\n";
 /** Output index of the proof out point. No transaction has 2^32 - 1 outputs. */
 export const PROOF_INDEX = 0xffffffff;
 /**
@@ -15,9 +15,6 @@ export const PROOF_INDEX = 0xffffffff;
  * everything can sign a proof. The signed transaction hash does not cover resolved input cells.
  */
 export const PROOF_INPUT_CAPACITY = 0xffffffffffffffffn;
-/** Lock of the proof output. Output locks never run; the output only carries the message. */
-export const NULL_LOCK = ccc.Script.from({ codeHash: `0x${"00".repeat(32)}`, hashType: "data", args: "0x" });
-
 const SHANNONS = 100000000n;
 const utf8 = (text: string) => ccc.bytesFrom(text, "utf8");
 
@@ -43,22 +40,23 @@ export interface ProofOptions {
 }
 
 /**
- * The proof transaction: one input at an out point that cannot exist, one output under NULL_LOCK
- * holding the message. Cell deps and witnesses are the wallet's to fill. The input carries the cell
- * the verifier resolves it to (capacity u64::MAX, the lock, no type, no data), so signers can
- * compute the sighash without the chain and see what the lock will see. `opts` carries a since or
- * header deps for the locks that need them.
+ * The proof transaction: one input at an out point that cannot exist, one output under the claimed
+ * lock holding the message. Output locks never run; the output names the lock, so a wallet reads
+ * from the transaction which of its locks is asked to sign. Cell deps and witnesses are the
+ * wallet's to fill. The input carries the cell the verifier resolves it to (capacity u64::MAX, the
+ * lock, no type, no data), so signers can compute the sighash without the chain and see what the
+ * lock will see. `opts` carries a since or header deps for the locks that need them.
  */
 export function proofTemplate(lock: ccc.ScriptLike, message: string, opts: ProofOptions = {}): ccc.Transaction {
   const script = ccc.Script.from(lock);
   const data = utf8(message);
-  const capacity = BigInt(8 + NULL_LOCK.occupiedSize + data.length) * SHANNONS;
+  const capacity = BigInt(8 + script.occupiedSize + data.length) * SHANNONS;
   return ccc.Transaction.from({
     version: 0,
     cellDeps: [],
     headerDeps: opts.headerDeps ?? [],
     inputs: [{ previousOutput: proofOutPoint(script, message), since: opts.since ?? 0, cellOutput: { capacity: PROOF_INPUT_CAPACITY, lock: script }, outputData: "0x" }],
-    outputs: [{ capacity, lock: NULL_LOCK }],
+    outputs: [{ capacity, lock: script }],
     outputsData: [ccc.hexFrom(data)],
     witnesses: [],
   });
@@ -66,10 +64,10 @@ export function proofTemplate(lock: ccc.ScriptLike, message: string, opts: Proof
 
 /**
  * For wallets. When `tx` is exactly the proof template for `lock` and the message in its output
- * (one input at index 0xffffffff whose tx hash is derived from the tag, the lock hash and that
- * message), returns the message's fields. A wallet then shows a proof request, not a transfer:
- * the domain, compared with the origin of the site that asks, and the account. Anything else gives
- * undefined.
+ * (one input at index 0xffffffff whose tx hash is derived from the tag, the lock hash
+ * and that message), returns the message's fields. A wallet then shows a proof request, not a
+ * transfer: the domain, compared with the origin of the site that asks, and the account. Anything
+ * else gives undefined.
  */
 export function readProof(tx: ccc.TransactionLike, lock: ccc.ScriptLike): MessageFields | undefined {
   const t = ccc.Transaction.from(tx);

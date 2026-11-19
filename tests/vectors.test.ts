@@ -113,11 +113,10 @@ for (const v of vectors) {
 }
 
 test("anyone-can-pay: the path without a signature is real, and only the template closes it", { skip: NO_VM }, async (t) => {
-  // Precondition of controls.noSignature: the refusal (exit -44, no output to pair the input with)
-  // must come from the template, not from a lock that never opens without a signature. The same
-  // empty witness on a transaction the prover built, whose only output is under the same lock and
-  // receives the input's whole capacity, opens the lock. The verifier refuses that transaction at
-  // the template check, before any lock runs.
+  // Precondition of controls.noSignature: the refusal must come from the template, not from a lock
+  // that never opens without a signature. The same empty witness on a transaction the prover built,
+  // whose only output is under the same lock, has no data and receives the input's whole capacity,
+  // opens the lock. The verifier refuses that transaction at the template check, before any lock runs.
   const v = vectors.find((x) => x.file === "anyone-can-pay.json")!;
   const c = v.controls!.noSignature;
   const tx = ccc.Transaction.from(c.tx).clone();
@@ -129,6 +128,20 @@ test("anyone-can-pay: the path without a signature is real, and only the templat
   assert.equal(raw.code, 0);
   const r = await verify({ lock: v.lock, message: v.message, tx }, { ...opts(v, v.message), runLock: async () => assert.fail("no lock run") });
   assert.match(!r.ok ? r.reason : "", /not the proof template/);
+
+  // The template's output is under the claimed lock, so the payment path sees it. Two things the
+  // template fixes keep that path shut, each measured alone on the opening transaction.
+  const template = ccc.Transaction.from(c.tx);
+  assert.ok(template.outputs[0].lock.eq(ccc.Script.from(v.lock)));
+  const withMessage = tx.clone();
+  withMessage.outputsData[0] = template.outputsData[0];
+  const a = await runRaw(v, withMessage);
+  const lessCapacity = tx.clone();
+  lessCapacity.outputs[0].capacity = template.outputs[0].capacity;
+  const b = await runRaw(v, lessCapacity);
+  t.diagnostic(`the same, with the message as the output's data: exit ${a.code}; with the template's capacity and no data: exit ${b.code}`);
+  assert.equal(a.code, c.exit);
+  assert.notEqual(b.code, 0);
 });
 
 test("multisig: each control keeps the accepted first signature, so the second slot is what fails", () => {
