@@ -197,7 +197,7 @@ Node RPCs cannot do this check: `test_tx_pool_accept` and `estimate_cycles` both
 - **Locks that read the input's capacity.** They see u64::MAX. A lock that adds it to another amount could overflow. Lowering it to 2^63 would keep the capped-key guarantee with room to spare, but the quantum-resistant lock signs over the input cells, so changing the capacity would invalidate every such proof (measured: exit 107); it stays at u64::MAX.
 - **Locks that need more than one input or more than one witness**, such as an owner lock that needs the owner's cell as a second input.
 - **Type scripts.** Never run. The proof is about the lock only.
-- **Mainnet.** V9 (secp256k1, 2026-11-05), V11 (JoyID, signed 2026-11-04), V16 (PW-lock) and V17 (the quantum-resistant lock, both 2026-11-06) are replayed by the tests against mainnet's cell deps, under ckb-debugger and under `ward-vm` with mainnet's consensus. The JoyID app on mainnet only accepts a requesting page served over https.
+- **Mainnet.** V9 (secp256k1, 2026-11-05), V11 (JoyID, signed 2026-11-19), V16 (PW-lock) and V17 (the quantum-resistant lock, both 2026-11-06) are replayed by the tests against mainnet's cell deps, under ckb-debugger and under `ward-vm` with mainnet's consensus. The JoyID app on mainnet only accepts a requesting page served over https.
 - **A production VM in production.** `ward-vm` (section 11) runs the node's script code under the chain's consensus, and every vector agrees with ckb-debugger under it. Running it for a platform, and moving its pin with node upgrades, is the platform's.
 
 ## 13. Locks tested
@@ -208,7 +208,7 @@ All on testnet unless the row says MAINNET, under the v1 rules (input at u64::MA
 | --- | --- | --- | --- | --- | --- |
 | secp256k1_blake160 | CCC private key signer | accepted | 1,631,945 | wrong key, exit -31 | V1 |
 | secp256k1_blake160, MAINNET (2026-11-05) | CCC private key signer, mainnet cell deps | accepted | 1,656,592 | wrong key -31; flipped signature bit -31; a testnet platform, message names another chain | V9 |
-| JoyID, main key, MAINNET (signed 2026-11-04) | JoyID app (app.joyid.dev), mainnet cell deps | accepted | 6,809,238 | flipped signature bit 11; another message 12; empty witness 4 | V11 |
+| JoyID, main key, MAINNET (signed 2026-11-19) | JoyID app (app.joyid.dev), mainnet cell deps | accepted | 6,792,243 | flipped signature bit 11; another message 12; empty witness 4 | V11 |
 | JoyID, main key | JoyID app (testnet.joyid.dev) | accepted | 6,817,974 | flipped signature bit, exit 11 | V2 |
 | JoyID, sub key (2026-11-19) | JoyID app on a second device, through CCC's JoyID signer | accepted | 6,927,781 | flipped signature bit 11; the sub key list from before the device was added 13; the CoTA cell that list lived in, refused as not live | V10 |
 | Cellula smart account, starter | software P-256 key, wallet's WebAuthn shape | accepted | 6,791,602 | wrong key, exit 26 | V3 |
@@ -905,7 +905,7 @@ Expected (ckb-debugger and `ward-vm` agree on every line):
 
 ### V11. JoyID, main key, mainnet
 
-File: `tests/vectors/mainnet-joyid.json`. A test account's main key on mainnet, signed in the JoyID app (app.joyid.dev, with the requesting page served over https) through an unmodified CCC `JoyId.CkbSigner`, on 2026-11-04.
+File: `tests/vectors/mainnet-joyid.json`. An account's main key on mainnet, signed in the JoyID app (app.joyid.dev, with the requesting page served over https) through an unmodified CCC `JoyId.CkbSigner`. Signed on 2026-11-19. It replaces the proof of 2026-11-04, which was in the earlier form and from another account.
 
 Lock:
 
@@ -913,32 +913,32 @@ Lock:
 {
   "codeHash": "0xd00c84f0ec8fd441c38bc3f87a371f547190f2fcff88e642bc5bf54b9e318323",
   "hashType": "type",
-  "args": "0x0001ea0eba2dd6b055c9f3c8340fa06e70547e019a3a"
+  "args": "0x0001dbda04783b21d6f72ab6f634c0bba5f4affb964c"
 }
 ```
 
-Lock hash: `0xac55d7dab2e9a4b85775a811bb4063e94cc98182835681d1b7706a491abf6bcf`
+Lock hash: `0x20e8ed8e6e9361a17e34d5098f136b88b239516ca2775c6361f51587accb088a`
 
 Message (289 bytes):
 
 ```text
 cellula.id wants you to prove control of a CKB lock.
 Account: ward-joyid-test
-Lock hash: 0xac55d7dab2e9a4b85775a811bb4063e94cc98182835681d1b7706a491abf6bcf
+Lock hash: 0x20e8ed8e6e9361a17e34d5098f136b88b239516ca2775c6361f51587accb088a
 Chain: 0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5
-Issued at: 2026-11-04T20:21:09.847Z
-Nonce: 4341bba95d06c240
+Issued at: 2026-11-19T00:58:30.507Z
+Nonce: dcf35bd69c17711f
 ```
 
-Out point tx hash P: `0x24357cea9b1ee851e43d27060c35e598fb250d18ac5e81446e8136dab57608c9`
+Out point tx hash P: `0x315c737e8c125c2ee36529377843f4b62cc2748007c54cff6db6b2b011612458`
 
-Transaction hash: `0xa38d4dee12352f4a424b4be8c702030f64517f9b327379b4d582ccae4785a1aa`
+Transaction hash: `0x2e7d8e988eb5c28959cc053cef07781e269c216dc2867af747220f48e02e5402`
 
 Cell deps: the five JoyID deps on mainnet, `0x673e1843035ce9c249efc36b62865e7a7c9f6e2ca6fc9c66fd108307e81355f9:0` to `:4`.
 
 Expected, against mainnet (ckb-debugger, and `ward-vm` under mainnet's consensus, which agree):
 
-- the proof: accepted, 6,809,238 cycles
+- the proof: accepted, 6,792,243 cycles
 - the message with one more character in the nonce: refused by the template check; the same witness run on that message's template: lock exit 12
 - bit 0 of witness byte 95 flipped (inside the signature): lock exit 11
 - probe (a), the same transaction with an empty witness: lock exit 4
