@@ -38,6 +38,7 @@ pub fn deps_live_at(rpc: &impl Rpc, cell_deps: &[packed::OutPoint], snapshot: u6
     if snapshot > tip {
         return Err(RpcError(format!("snapshot block {snapshot} is past the tip {tip}")));
     }
+    crate::chain::indexer_reaches(rpc, snapshot)?;
     let mut deps = Vec::new();
     for op in cell_deps {
         let index = index_of(op) as usize;

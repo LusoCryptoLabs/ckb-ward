@@ -92,5 +92,10 @@ pub fn read_proof(tx: &packed::Transaction, lock: &packed::Script) -> Option<Mes
     if template_like(lock, text, tx).calc_tx_hash() != tx.calc_tx_hash() {
         return None;
     }
-    parse_message(text).ok()
+    let fields = parse_message(text).ok()?;
+    // The text shows this lock hash line to the person: it must be the lock the transaction is for.
+    if fields.lock_hash != crate::util::script_hash_hex(lock) {
+        return None;
+    }
+    Some(fields)
 }

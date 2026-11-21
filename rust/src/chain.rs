@@ -1,6 +1,7 @@
 //! Reading the chain. Everything this crate reads goes through [`Rpc`], one JSON RPC call at a time,
 //! with the same methods the TypeScript verifier calls. [`RpcClient`] speaks to a node over HTTP;
 //! a backend with its own client implements the trait instead.
+use std::io::Read;
 use std::time::Duration;
 
 use serde_json::Value;
@@ -30,6 +31,38 @@ impl<T: Rpc + ?Sized> Rpc for &T {
 
 /// Default timeout of one chain read.
 pub const RPC_TIMEOUT: Duration = Duration::from_secs(10);
+/// Default time for all the chain reads of one `verify` call. A proof makes at most 57 reads.
+pub const VERIFY_DEADLINE: Duration = Duration::from_secs(60);
+/// Largest answer accepted from the node, in bytes: the largest cell a proof can list is under 1 MB of hex.
+pub const MAX_RPC_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
+
+/// An [`Rpc`] that stops reading once `until` has passed: a call that would start later fails. The
+/// time allowed for the reads of one verification is shared by all of them.
+pub struct Deadline<'a, R: Rpc> {
+    pub rpc: &'a R,
+    pub until: std::time::Instant,
+}
+
+impl<R: Rpc> Rpc for Deadline<'_, R> {
+    fn call(&self, method: &str, params: Value) -> Result<Value, RpcError> {
+        if std::time::Instant::now() >= self.until {
+            return Err(RpcError(format!("{method}: the time allowed for this verification has passed")));
+        }
+        self.rpc.call(method, params)
+    }
+}
+
+/// Throws unless the node's indexer has indexed up to block `at`. An indexer that lags answers as the
+/// chain was a few blocks ago: a deposit spent since would still look live. The search by script
+/// (`get_transactions`) reads the indexer, so the check is made before it is used.
+pub fn indexer_reaches(rpc: &impl Rpc, at: u64) -> Result<(), RpcError> {
+    let tip = rpc.call("get_indexer_tip", Value::Array(vec![]))?;
+    match num(&tip["block_number"], "get_indexer_tip block_number") {
+        Ok(n) if n >= at => Ok(()),
+        Ok(n) => Err(RpcError(format!("the indexer is at block {n}, behind the snapshot block {at}"))),
+        Err(_) => Err(RpcError("the indexer is at block unknown, behind the snapshot block".to_string())),
+    }
+}
 
 /// A blocking JSON RPC client for a CKB node. Each call fails after the timeout, body included.
 #[cfg(feature = "rpc")]
@@ -56,7 +89,13 @@ impl Rpc for RpcClient {
         let id = self.id.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         let body = serde_json::json!({ "id": id, "jsonrpc": "2.0", "method": method, "params": params });
         let res = self.agent.post(&self.url).send_json(body).map_err(|e| RpcError(format!("{method}: {e}")))?;
-        let mut v: Value = res.into_json().map_err(|e| RpcError(format!("{method}: {e}")))?;
+        // Never buffer more than the cap: a node that answers without end must not fill the memory.
+        let mut text = Vec::new();
+        res.into_reader().take(MAX_RPC_RESPONSE_BYTES + 1).read_to_end(&mut text).map_err(|e| RpcError(format!("{method}: {e}")))?;
+        if text.len() as u64 > MAX_RPC_RESPONSE_BYTES {
+            return Err(RpcError(format!("{method}: the node's answer is larger than {MAX_RPC_RESPONSE_BYTES} bytes")));
+        }
+        let mut v: Value = serde_json::from_slice(&text).map_err(|e| RpcError(format!("{method}: {e}")))?;
         if let Some(e) = v.get("error").filter(|e| !e.is_null()) {
             let msg = e.get("message").and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| e.to_string());
             return Err(RpcError(format!("{method}: {msg}")));

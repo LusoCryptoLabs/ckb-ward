@@ -82,10 +82,15 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146097 + doe - 719468
 }
 
-/// Milliseconds since 1970 for `YYYY-MM-DDTHH:MM:SS[.f{1,9}]Z`, read the way JavaScript's
-/// `Date.parse` reads it, so this crate and the TypeScript one accept the same messages: month 1 to
-/// 12, day 1 to 31 (a day past the month's end runs into the next month), 24:00:00 only exactly,
-/// and the fraction cut to milliseconds. None when the text is not that format.
+fn days_in_month(y: i64, m: i64) -> i64 {
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][(m - 1) as usize]
+}
+
+/// Milliseconds since 1970 for `YYYY-MM-DDTHH:MM:SS[.f{1,9}]Z`, a time that exists (RFC 3339): the
+/// month 1 to 12, the day inside its month (February 30 does not exist, and 1900 was not a leap
+/// year), the hour 0 to 23, the minute and the second 0 to 59, and the fraction cut to milliseconds.
+/// The TypeScript package refuses the same texts. None when the text is not that.
 pub fn parse_time(s: &str) -> Option<i64> {
     let b = s.as_bytes();
     let digits = |r: std::ops::Range<usize>| -> Option<i64> {
@@ -108,11 +113,7 @@ pub fn parse_time(s: &str) -> Option<i64> {
         }
         _ => return None,
     };
-    let frac_zero = b[19..b.len() - 1].iter().all(|&c| c == b'.' || c == b'0');
-    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || mi > 59 || sec > 59 {
-        return None;
-    }
-    if h > 24 || (h == 24 && (mi != 0 || sec != 0 || !frac_zero)) {
+    if !(1..=12).contains(&mo) || d < 1 || d > days_in_month(y, mo) || h > 23 || mi > 59 || sec > 59 {
         return None;
     }
     Some(((days_from_civil(y, mo, 1) + d - 1) * 86_400 + h * 3600 + mi * 60 + sec) * 1000 + ms)
@@ -209,20 +210,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn time_reads_like_date_parse() {
-        // Values printed by Node 24's Date.parse on 2026-11-21.
+    fn time_is_a_time_that_exists() {
+        // Values printed by Node 24's Date.parse on 2026-11-21 where the time exists; None where RFC 3339 has no such time.
         let cases: &[(&str, Option<i64>)] = &[
             ("2026-11-04T18:00:00Z", Some(1793815200000)),
-            ("2026-02-29T00:00:00Z", Some(1772323200000)),
+            ("2026-02-29T00:00:00Z", None),
             ("2024-02-29T00:00:00Z", Some(1709164800000)),
-            ("2026-02-30T00:00:00Z", Some(1772409600000)),
-            ("2026-02-31T00:00:00Z", Some(1772496000000)),
-            ("2026-04-31T00:00:00Z", Some(1777593600000)),
+            ("2026-02-30T00:00:00Z", None),
+            ("2026-02-31T00:00:00Z", None),
+            ("2026-04-31T00:00:00Z", None),
+            ("2026-04-30T23:59:59Z", Some(1777593599000)),
             ("2026-13-01T00:00:00Z", None),
             ("2026-00-01T00:00:00Z", None),
             ("2026-01-00T00:00:00Z", None),
             ("2026-01-32T00:00:00Z", None),
-            ("2026-01-01T24:00:00Z", Some(1767312000000)),
+            ("2026-01-01T24:00:00Z", None),
             ("2026-01-01T24:00:01Z", None),
             ("2026-01-01T24:01:00Z", None),
             ("2026-01-01T23:60:00Z", None),
@@ -236,9 +238,10 @@ mod tests {
             ("2026-01-01T00:00:00.9999Z", Some(1767225600999)),
             ("0000-01-01T00:00:00Z", Some(-62167219200000)),
             ("9999-12-31T23:59:59.999Z", Some(253402300799999)),
-            ("1900-02-29T00:00:00Z", Some(-2203891200000)),
+            ("1900-02-29T00:00:00Z", None),
+            ("1900-02-28T00:00:00Z", Some(-2203977600000)),
             ("2000-02-29T00:00:00Z", Some(951782400000)),
-            ("2026-01-01T24:00:00.000Z", Some(1767312000000)),
+            ("2026-01-01T24:00:00.000Z", None),
             ("2026-01-01T24:00:00.5Z", None),
             ("2026-01-01T00:00:00.Z", None),
             ("2026-01-01T00:00:00.1234567890Z", None),

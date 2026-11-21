@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
-import { RPC_TIMEOUT_MS, jsonRpc } from "./verify.ts";
+import { RPC_TIMEOUT_MS, indexerReaches, jsonRpc } from "./verify.ts";
 
 /** The Nervos DAO type script's code hash (hash_type type), the same on mainnet and testnet. */
 export const NERVOS_DAO_CODE_HASH = "0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e";
@@ -50,6 +50,7 @@ export async function daoWeightAt(rpcUrl: string, lock: ccc.ScriptLike, snapshot
   const at = ccc.numFrom(snapshot);
   const tip = BigInt((await rpc("get_tip_header", [])).number);
   if (at > tip) throw new Error(`snapshot block ${at} is past the tip ${tip}`);
+  await indexerReaches(rpc, at);
   const maxPages = options.maxPages ?? 50;
   const script = ccc.Script.from(lock);
   const lockHash = script.hash();

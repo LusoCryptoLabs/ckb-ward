@@ -9,7 +9,7 @@ use ckb_jsonrpc_types as rpc;
 use ckb_types::{bytes::Bytes, core::HeaderView, packed, prelude::*, H256};
 use serde_json::{json, Value};
 
-use crate::chain::{tip_epoch, Rpc, RpcError};
+use crate::chain::{tip_epoch, Deadline, Rpc, RpcError, VERIFY_DEADLINE};
 use crate::message::{parse_message, parse_time, MessageFields};
 use crate::run::{consensus_for, run_lock, DepCell, LockRun, DEFAULT_MAX_CYCLES};
 use crate::template::template_like;
@@ -87,6 +87,9 @@ pub struct VerifyOptions {
     pub max_witness_bytes: usize,
     /// Cycle limit of each lock run. Default [`DEFAULT_MAX_CYCLES`].
     pub max_cycles: u64,
+    /// Time allowed for all the chain reads of one call together. Default [`VERIFY_DEADLINE`]. A
+    /// read that would start after it fails with an error: the node is too slow.
+    pub deadline: Duration,
     /// The consensus to run the lock under. None: mainnet's or testnet's from the bundled spec,
     /// chosen by `expect.chain`; another chain then fails with [`VerifyError::NoConsensus`].
     pub consensus: Option<Arc<Consensus>>,
@@ -94,7 +97,7 @@ pub struct VerifyOptions {
 
 impl Default for VerifyOptions {
     fn default() -> Self {
-        Self { probes: true, max_witness_bytes: MAX_WITNESS_BYTES, max_cycles: DEFAULT_MAX_CYCLES, consensus: None }
+        Self { probes: true, max_witness_bytes: MAX_WITNESS_BYTES, max_cycles: DEFAULT_MAX_CYCLES, deadline: VERIFY_DEADLINE, consensus: None }
     }
 }
 
@@ -395,6 +398,8 @@ pub fn verify(
     if !claim_nonce(&fields) {
         return refuse("nonce already used");
     }
+    let timed = Deadline { rpc, until: std::time::Instant::now() + opts.deadline };
+    let rpc = &timed;
     let genesis = rpc.call("get_block_hash", json!(["0x0"]))?;
     if genesis.as_str() != Some(fields.chain.as_str()) {
         return refuse("the node is on another chain");

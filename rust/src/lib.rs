@@ -61,7 +61,7 @@ pub use ckb_types::H256;
 
 #[cfg(feature = "rpc")]
 pub use chain::RpcClient;
-pub use chain::{tip_epoch, tip_number, Rpc, RpcError, RPC_TIMEOUT};
+pub use chain::{indexer_reaches, tip_epoch, tip_number, Deadline, Rpc, RpcError, MAX_RPC_RESPONSE_BYTES, RPC_TIMEOUT, VERIFY_DEADLINE};
 pub use message::{iso_time, message, parse_message, parse_time, MessageError, MessageFields, MAX_MESSAGE_BYTES};
 pub use run::{consensus_for, LockRun, DEFAULT_MAX_CYCLES, MAINNET_GENESIS, TESTNET_GENESIS};
 pub use snapshot::{deps_live_at, DepAtSnapshot, DepsAtSnapshot};

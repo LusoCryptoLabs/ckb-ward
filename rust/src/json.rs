@@ -40,7 +40,10 @@ fn snake_to_camel(k: &str) -> String {
 
 /// Keys to snake_case, `depGroup` to `dep_group`, numbers given as JSON numbers to hex, and the
 /// fields CCC adds that the RPC form does not have (an input's cell, a transaction's hash) dropped.
-fn to_rpc_form(v: &Value) -> Value {
+///
+/// An object that holds the same key in both spellings (`outputsData` and `outputs_data`) is an
+/// error: the two readers would each take a different one.
+fn to_rpc_form(v: &Value) -> Result<Value, String> {
     match v {
         Value::Object(m) => {
             let mut out = Map::new();
@@ -49,20 +52,25 @@ fn to_rpc_form(v: &Value) -> Value {
                 if matches!(key.as_str(), "cell_output" | "output_data" | "hash") {
                     continue;
                 }
+                if k == "depType" && val.as_str() == Some("dep_group") {
+                    return Err("depType is code or depGroup (dep_group is the JSON RPC spelling, under dep_type)".into());
+                }
                 let val = match (key.as_str(), val) {
                     ("dep_type", Value::String(s)) if s == "depGroup" => Value::String("dep_group".into()),
                     (k, Value::Number(n)) if NUMERIC.contains(&k) => match n.as_u64() {
                         Some(n) => Value::String(format!("{n:#x}")),
                         None => val.clone(),
                     },
-                    _ => to_rpc_form(val),
+                    _ => to_rpc_form(val)?,
                 };
-                out.insert(key, val);
+                if out.insert(key.clone(), val).is_some() {
+                    return Err(format!("the key {key} is written twice (camelCase and snake_case)"));
+                }
             }
-            Value::Object(out)
+            Ok(Value::Object(out))
         }
-        Value::Array(a) => Value::Array(a.iter().map(to_rpc_form).collect()),
-        other => other.clone(),
+        Value::Array(a) => Ok(Value::Array(a.iter().map(to_rpc_form).collect::<Result<_, _>>()?)),
+        other => Ok(other.clone()),
     }
 }
 
@@ -86,13 +94,13 @@ fn to_ccc_form(v: Value) -> Value {
 
 /// A script from JSON in either form.
 pub fn script_from_json(v: &Value) -> Result<packed::Script, String> {
-    let s: rpc::Script = serde_json::from_value(to_rpc_form(v)).map_err(|e| format!("script: {e}"))?;
+    let s: rpc::Script = serde_json::from_value(to_rpc_form(v)?).map_err(|e| format!("script: {e}"))?;
     Ok(s.into())
 }
 
 /// A transaction from JSON in either form.
 pub fn transaction_from_json(v: &Value) -> Result<packed::Transaction, String> {
-    let t: rpc::Transaction = serde_json::from_value(to_rpc_form(v)).map_err(|e| format!("transaction: {e}"))?;
+    let t: rpc::Transaction = serde_json::from_value(to_rpc_form(v)?).map_err(|e| format!("transaction: {e}"))?;
     Ok(t.into())
 }
 
