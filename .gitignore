@@ -1,5 +1,6 @@
 node_modules/
 dist/
 vm/target/
+rust/target/
 demo/data/
 playground/data/
