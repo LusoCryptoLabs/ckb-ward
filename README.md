@@ -67,6 +67,8 @@ Three entries:
 - `ckb-ward/browser`: the verifier without the runners that start a process. No Node built-ins: a page can verify a proof itself, running the lock with `ckbVmJs` (below).
 - `ckb-ward/wallet`: `message`, `parseMessage`, `proofTemplate`, `readProof` and the constants. No Node built-ins, so it bundles for a browser. This is what a wallet or a site needs.
 
+A Rust backend can use the crate in [`rust/`](rust/README.md): the same message, template, verifier and snapshot rules, with the lock run in process by `ckb-script`, the node's own crate. Not on crates.io yet; it installs from git.
+
 ## Use
 
 ```ts

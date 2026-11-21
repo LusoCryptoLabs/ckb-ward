@@ -1,0 +1,43 @@
+[package]
+name = "ckb-ward"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+license = "MIT"
+description = "Verify a Ward lock proof: that the holder of a key controls a CKB lock, for any lock that signs the transaction hash"
+repository = "https://github.com/LusoCryptoLabs/ckb-ward"
+readme = "README.md"
+keywords = ["ckb", "nervos", "proof", "wallet", "lock"]
+categories = ["cryptography::cryptocurrencies", "authentication"]
+# Not on crates.io yet.
+publish = false
+
+# The node's own crates from crates.io. ckb-script 1.2.1 pins ckb-vm 0.24.15, the VM mainnet and
+# testnet ran on 2026-11-05 (node 0.210.0), the same one ward-vm in ../vm builds from the node's tag.
+[dependencies]
+ckb-script = "1.2.1"
+ckb-chain-spec = "1.1.3"
+ckb-resource = "1.2.1"
+ckb-types = "1.1.4"
+ckb-traits = "1.1.3"
+ckb-hash = "1.1.1"
+ckb-jsonrpc-types = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "2", features = ["json"], optional = true }
+getrandom = "0.2"
+
+[features]
+default = ["rpc"]
+# A blocking JSON RPC client for a CKB node (RpcChain). Without it, bring your own Chain.
+rpc = ["dep:ureq"]
+
+[dev-dependencies]
+flate2 = "1"
+tiny_http = "0.12"
+
+[profile.release]
+overflow-checks = true
+
+[profile.test]
+opt-level = 2
