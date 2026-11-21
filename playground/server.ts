@@ -494,7 +494,13 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     const moved = prev && prev.account !== row.account ? prev.account : null;
     db.prepare(
       "INSERT INTO vbindings (lock_hash, lock, account, bound_at, bound_block, moved_from, cell_deps) VALUES (?, ?, ?, ?, ?, ?, ?) " +
-        "ON CONFLICT (lock_hash) DO UPDATE SET account = excluded.account, bound_at = excluded.bound_at, bound_block = excluded.bound_block, moved_from = excluded.moved_from, cell_deps = excluded.cell_deps",
+        // Proving the same lock again for the account that already holds it changes nothing but the cell deps: the time of the
+        // binding and its cooldown are kept, or a second proof would be a way out of the cooldown.
+        "ON CONFLICT (lock_hash) DO UPDATE SET " +
+        "bound_at = CASE WHEN vbindings.account = excluded.account THEN vbindings.bound_at ELSE excluded.bound_at END, " +
+        "bound_block = CASE WHEN vbindings.account = excluded.account THEN vbindings.bound_block ELSE excluded.bound_block END, " +
+        "moved_from = CASE WHEN vbindings.account = excluded.account THEN vbindings.moved_from ELSE excluded.moved_from END, " +
+        "account = excluded.account, cell_deps = excluded.cell_deps",
     ).run(row.lock_hash, row.lock, row.account, now, at, moved, deps);
     db.prepare("INSERT INTO vhistory (lock_hash, account, action, at, block) VALUES (?, ?, ?, ?, ?)").run(row.lock_hash, row.account, moved ? `moved from ${moved}` : "bound", now, at);
     const headers: Record<string, string> = {};

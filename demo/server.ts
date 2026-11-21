@@ -309,7 +309,13 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     // Rule 6: one binding per lock; binding it to another account moves it, with a cooldown.
     db.prepare(
       "INSERT INTO bindings (lock_hash, lock, account, bound_at, bound_block, moved_from, cell_deps) VALUES (?, ?, ?, ?, ?, ?, ?) " +
-        "ON CONFLICT (lock_hash) DO UPDATE SET account = excluded.account, bound_at = excluded.bound_at, bound_block = excluded.bound_block, moved_from = excluded.moved_from, cell_deps = excluded.cell_deps",
+        // Proving the same lock again for the account that already holds it changes nothing but the cell deps: the time of the
+        // binding and its cooldown are kept, or a second proof would be a way out of the cooldown.
+        "ON CONFLICT (lock_hash) DO UPDATE SET " +
+        "bound_at = CASE WHEN bindings.account = excluded.account THEN bindings.bound_at ELSE excluded.bound_at END, " +
+        "bound_block = CASE WHEN bindings.account = excluded.account THEN bindings.bound_block ELSE excluded.bound_block END, " +
+        "moved_from = CASE WHEN bindings.account = excluded.account THEN bindings.moved_from ELSE excluded.moved_from END, " +
+        "account = excluded.account, cell_deps = excluded.cell_deps",
     ).run(row.lock_hash, row.lock, row.account, now, at, moved, deps);
     db.prepare("INSERT INTO history (lock_hash, account, action, at, block) VALUES (?, ?, ?, ?, ?)").run(row.lock_hash, row.account, moved ? `moved from ${moved}` : "bound", now, at);
 
