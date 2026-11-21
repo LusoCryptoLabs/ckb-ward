@@ -18,7 +18,7 @@
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # let lock_json = serde_json::json!({});
 //! # let signed_tx_json = serde_json::json!({});
-//! # let (now_ms, nonce, chain) = (0i64, "n-1", ckb_types::H256::default());
+//! # let (now_ms, nonce, chain) = (0i64, "n-1", ckb_ward::H256::default());
 //! // 1. Issue: store the message with the nonce, hand the template to the wallet.
 //! let lock = json::script_from_json(&lock_json)?;
 //! let text = message("dao.example", "user-42", &lock, &chain, &iso_time(now_ms), nonce)?;
@@ -53,6 +53,11 @@ pub mod template;
 mod util;
 pub mod verify;
 pub mod weight;
+
+/// The node's types crate this one is built on, so a caller needs no matching `ckb-types` of its own.
+pub use ckb_types;
+/// The type of [`Expect::chain`].
+pub use ckb_types::H256;
 
 #[cfg(feature = "rpc")]
 pub use chain::RpcClient;

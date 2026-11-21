@@ -49,6 +49,8 @@ The wallet side is unchanged: with CCC,
 - Chain reads go through the `Rpc` trait. `RpcClient` (feature `rpc`, on by default) is a blocking
   HTTP client; from async code, call `verify` inside `spawn_blocking`, or implement `Rpc` on your
   own client.
+- `ckb_ward::H256` (the type of `Expect::chain`) and `ckb_ward::ckb_types` are re-exported, so a
+  caller needs no `ckb-types` of its own.
 - `deps_live_at` and `dao_weight_at` are the snapshot rules of SPEC section 9, for a platform that
   counts weight from bindings.
 
