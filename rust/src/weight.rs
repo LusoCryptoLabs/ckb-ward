@@ -47,6 +47,7 @@ pub fn dao_weight_at(rpc: &impl Rpc, lock: &packed::Script, snapshot: u64, max_p
     if snapshot > tip {
         return Err(RpcError(format!("snapshot block {snapshot} is past the tip {tip}")));
     }
+    crate::chain::indexer_reaches(rpc, snapshot)?;
     let lock_hash = lock.calc_script_hash();
     let search_key = json!({
         "script": script_to_rpc_json(lock),

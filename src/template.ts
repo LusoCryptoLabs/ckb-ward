@@ -80,7 +80,10 @@ export function readProof(tx: ccc.TransactionLike, lock: ccc.ScriptLike): Messag
     tpl.headerDeps = [...t.headerDeps];
     tpl.inputs[0].since = t.inputs[0].since;
     if (tpl.hash() !== t.hash()) return undefined;
-    return parseMessage(text);
+    const fields = parseMessage(text);
+    // The text shows this lock hash line to the person: it must be the lock the transaction is for.
+    if (fields.lockHash !== ccc.Script.from(lock).hash()) return undefined;
+    return fields;
   } catch {
     return undefined;
   }

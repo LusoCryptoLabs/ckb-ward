@@ -37,6 +37,20 @@ const DOMAIN = /^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?$/;
 const ACCOUNT = /^[\x21-\x7e](?:[\x20-\x7e]{0,254}[\x21-\x7e])?$/;
 const HASH = /^0x[0-9a-f]{64}$/;
 const TIME = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z$/;
+/**
+ * A time that exists: the month 1 to 12, the day inside its month (February 30 does not exist, and
+ * 1900 was not a leap year), the hour 0 to 23, the minute and the second 0 to 59. Date.parse reads
+ * "2026-02-30" as March 2 and "T24:00:00" as the next midnight, so it cannot be the judge; both
+ * verifiers refuse what RFC 3339 does not allow.
+ */
+export function isCalendarTime(s: string): boolean {
+  const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]{1,9})?Z$/.exec(s);
+  if (!m) return false;
+  const [y, mo, d, h, mi, se] = m.slice(1, 7).map(Number);
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1];
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= days && h <= 23 && mi <= 59 && se <= 59;
+}
 const NONCE = /^[A-Za-z0-9._~-]{1,128}$/;
 
 function check(fields: MessageFields): void {
@@ -44,7 +58,7 @@ function check(fields: MessageFields): void {
   if (!ACCOUNT.test(fields.account)) throw new Error("bad account");
   if (!HASH.test(fields.lockHash)) throw new Error("bad lock hash");
   if (!HASH.test(fields.chain)) throw new Error("bad chain");
-  if (!TIME.test(fields.issuedAt) || Number.isNaN(Date.parse(fields.issuedAt))) throw new Error("bad issued at");
+  if (!TIME.test(fields.issuedAt) || !isCalendarTime(fields.issuedAt) || Number.isNaN(Date.parse(fields.issuedAt))) throw new Error("bad issued at");
   if (!NONCE.test(fields.nonce)) throw new Error("bad nonce");
 }
 

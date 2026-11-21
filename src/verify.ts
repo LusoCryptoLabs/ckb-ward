@@ -3,6 +3,7 @@ import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
 import { parseMessage, type MessageFields } from "./message.ts";
 import type { LockRun, MockCell, MockTransaction, RunLock } from "./lock.ts";
 import { PROOF_INPUT_CAPACITY, proofTemplate } from "./template.ts";
+import { lockProblem, rewritten, wireProblem } from "./wire.ts";
 
 /** What the prover hands in: the lock it claims, the message it was asked to sign, the signed tx. */
 export interface Proof {
@@ -55,6 +56,11 @@ export interface VerifyOptions {
   rpcTimeoutMs?: number;
   /** Largest witness accepted, in bytes. Default MAX_WITNESS_BYTES. */
   maxWitnessBytes?: number;
+  /**
+   * Time allowed for all the chain reads of one verify() call together, in milliseconds. Default
+   * VERIFY_DEADLINE_MS. A read that would start after it, or run past it, throws: the node is too slow.
+   */
+  deadlineMs?: number;
 }
 
 export type VerifyResult =
@@ -94,6 +100,10 @@ export const MAX_TX_BYTES = 597_000;
 export const MAX_WITNESS_BYTES = 65_536;
 /** Default timeout of one chain read. */
 export const RPC_TIMEOUT_MS = 10_000;
+/** Default time for all the chain reads of one verify() call. A proof makes at most 57 reads. */
+export const VERIFY_DEADLINE_MS = 60_000;
+/** Largest answer accepted from the node, in bytes: the largest cell a proof can list is under 1 MB of hex. */
+export const MAX_RPC_RESPONSE_BYTES = 16 * 1024 * 1024;
 /** Allowed clock difference for "Issued at" in the future. */
 export const CLOCK_SKEW_SECONDS = 60;
 
@@ -121,20 +131,58 @@ export function omnilockAdmin(lock: ccc.ScriptLike): boolean {
 
 type Rpc = (method: string, params: unknown[]) => Promise<any>;
 
-/** A JSON RPC client. Each call fails after timeoutMs, body included. */
-export function jsonRpc(url: string, timeoutMs = RPC_TIMEOUT_MS): Rpc {
+/** The body of a response as text, refusing to buffer more than `max` bytes. */
+async function readLimited(res: Response, max: number): Promise<string> {
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > max) throw new Error(`the node's answer is larger than ${max} bytes`);
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > max) {
+      await reader.cancel();
+      throw new Error(`the node's answer is larger than ${max} bytes`);
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(ccc.bytesConcat(...chunks));
+}
+
+/**
+ * A JSON RPC client. Each call fails after timeoutMs, body included, and after `deadline` (a Date.now()
+ * value shared by the calls of one verification): a call that would start later throws. An answer larger
+ * than MAX_RPC_RESPONSE_BYTES is refused before it is buffered.
+ */
+export function jsonRpc(url: string, timeoutMs = RPC_TIMEOUT_MS, deadline?: number): Rpc {
   let id = 0;
   return async (method, params) => {
+    const left = deadline === undefined ? timeoutMs : Math.min(timeoutMs, deadline - Date.now());
+    if (left <= 0) throw new Error(`${method}: the time allowed for this verification has passed`);
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id: ++id, jsonrpc: "2.0", method, params }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.timeout(left),
     });
-    const body = await res.json();
+    const body = JSON.parse(await readLimited(res, MAX_RPC_RESPONSE_BYTES));
     if (body.error) throw new Error(`${method}: ${body.error.message}`);
     return body.result;
   };
+}
+
+/**
+ * Throws unless the node's indexer has indexed up to block `at`. An indexer that lags answers as the
+ * chain was a few blocks ago: a deposit spent since would still look live. The search by script
+ * (get_transactions) reads the indexer, so the check is made before it is used.
+ */
+export async function indexerReaches(rpc: Rpc, at: bigint): Promise<void> {
+  const tip = await rpc("get_indexer_tip", []);
+  const n = typeof tip?.block_number === "string" ? BigInt(tip.block_number) : -1n;
+  if (n < at) throw new Error(`the indexer is at block ${n < 0n ? "unknown" : n}, behind the snapshot block ${at}`);
 }
 
 /** A cell dep the verifier refuses: not live, not a dep group, listed twice, or too many cells. */
@@ -169,6 +217,8 @@ export function duplicateCellDep(cellDeps: ccc.CellDepLike[]): ccc.OutPoint | un
 
 export interface ResolveOptions {
   rpcTimeoutMs?: number;
+  /** A Date.now() value after which no read starts (see jsonRpc). */
+  deadline?: number;
   /** Default MAX_DEP_GROUP_MEMBERS. */
   maxDepGroupMembers?: number;
 }
@@ -185,7 +235,7 @@ export async function resolveCellDeps(rpcUrl: string, cellDeps: ccc.CellDepLike[
   const deps = cellDeps.map((d) => ccc.CellDep.from(d));
   const twice = duplicateCellDep(deps);
   if (twice) throw new CellDepError(`cell dep ${key(twice)} is listed twice`);
-  const rpc = jsonRpc(rpcUrl, options.rpcTimeoutMs);
+  const rpc = jsonRpc(rpcUrl, options.rpcTimeoutMs, options.deadline);
   const out: MockTransaction["mock_info"]["cell_deps"] = [];
   const groups: { outPoint: ccc.OutPoint; data: Uint8Array; n: number }[] = [];
   let members = 0;
@@ -215,8 +265,8 @@ export async function resolveCellDeps(rpcUrl: string, cellDeps: ccc.CellDepLike[
  * Every header dep read live from the chain, by block hash, in the order listed, each read once.
  * Never use header contents supplied by the prover. Throws NotLiveError when a header is unknown.
  */
-export async function resolveHeaders(rpcUrl: string, headerDeps: ccc.HexLike[], rpcTimeoutMs?: number): Promise<unknown[]> {
-  const rpc = jsonRpc(rpcUrl, rpcTimeoutMs);
+export async function resolveHeaders(rpcUrl: string, headerDeps: ccc.HexLike[], rpcTimeoutMs?: number, deadline?: number): Promise<unknown[]> {
+  const rpc = jsonRpc(rpcUrl, rpcTimeoutMs, deadline);
   const seen = new Set<string>();
   const out: unknown[] = [];
   for (const dep of headerDeps) {
@@ -255,7 +305,7 @@ function missingExpect(e: Expect | undefined): string | undefined {
   for (const k of ["message", "domain", "account", "nonce"] as const) if (typeof e[k] !== "string" || e[k] === "") return `expect.${k} is required`;
   if (e.chain === undefined || e.chain === null) return "expect.chain is required";
   if (typeof e.maxAgeSeconds !== "number" || !Number.isFinite(e.maxAgeSeconds) || e.maxAgeSeconds < 0) return "expect.maxAgeSeconds is required";
-  if (e.now !== undefined && !(e.now instanceof Date)) return "expect.now must be a Date";
+  if (e.now !== undefined && (!(e.now instanceof Date) || Number.isNaN(e.now.getTime()))) return "expect.now must be a valid Date";
   return undefined;
 }
 
@@ -309,12 +359,16 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
   let lock: ccc.Script, tx: ccc.Transaction, fields: MessageFields, chain: ccc.Hex;
   try {
     chain = ccc.hexFrom(expect.chain);
+    const problem = lockProblem(proof.lock) ?? wireProblem(proof.tx);
+    if (problem) return fail(`malformed proof: ${problem}`);
     lock = ccc.Script.from(proof.lock);
     tx = ccc.Transaction.from(proof.tx);
     fields = parseMessage(proof.message);
   } catch (e) {
     return fail(`malformed proof: ${text(e)}`);
   }
+  // The parser must not have changed what the prover sent (it raises a low output capacity to the minimum).
+  if (rewritten(proof.tx, tx)) return fail("not the proof template for this lock and message");
   if (fields.lockHash !== lock.hash()) return fail("message names another lock");
   if (omnilockAdmin(lock)) return fail("omnilock in administrator mode: an administrator can sign for it");
   const expectError = checkExpect(fields, expect, chain, proof.message);
@@ -327,6 +381,7 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
   const twice = duplicateCellDep(tx.cellDeps);
   if (twice) return fail(`cell dep ${key(twice)} is listed twice`);
 
+  if (tx.inputs.length !== 1 || tx.outputs.length !== 1 || tx.outputsData.length !== 1) return fail("not the proof template for this lock and message");
   const template = proofTemplate(lock, proof.message);
   template.cellDeps = tx.cellDeps.map((d) => d.clone());
   // Cell deps, header deps and the input's since are the prover's to fill, like the witness: the
@@ -338,14 +393,15 @@ export async function verify(proof: Proof, options: VerifyOptions): Promise<Veri
 
   // Every check above is free. From here on each step reads the chain or runs the lock.
   if (options.claimNonce && !(await options.claimNonce(fields))) return fail("nonce already used");
-  const rpc = jsonRpc(options.rpcUrl, options.rpcTimeoutMs);
+  const deadline = Date.now() + (options.deadlineMs ?? VERIFY_DEADLINE_MS);
+  const rpc = jsonRpc(options.rpcUrl, options.rpcTimeoutMs, deadline);
   if (chain !== (await rpc("get_block_hash", ["0x0"]))) return fail("the node is on another chain");
 
   let deps: MockTransaction["mock_info"]["cell_deps"];
   let headers: unknown[];
   try {
-    deps = await resolveCellDeps(options.rpcUrl, tx.cellDeps, { rpcTimeoutMs: options.rpcTimeoutMs });
-    headers = await resolveHeaders(options.rpcUrl, tx.headerDeps, options.rpcTimeoutMs);
+    deps = await resolveCellDeps(options.rpcUrl, tx.cellDeps, { rpcTimeoutMs: options.rpcTimeoutMs, deadline });
+    headers = await resolveHeaders(options.rpcUrl, tx.headerDeps, options.rpcTimeoutMs, deadline);
   } catch (e) {
     if (e instanceof CellDepError) return fail(e.message);
     throw e;

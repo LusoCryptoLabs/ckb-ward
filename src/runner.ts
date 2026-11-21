@@ -120,7 +120,8 @@ export interface WardVmOptions {
  * on stderr and cannot reach stdout, so it cannot forge the result line.
  */
 export function parseWardVmRun(r: Exited): LockRun {
-  const output = [r.stderr.trim(), r.stdout.trim()].filter(Boolean).join("\n");
+  const plain = (s: string) => s.replace(/^ward-vm: /, "");
+  const output = [plain(r.stderr.trim()), r.stdout.trim()].filter(Boolean).join("\n");
   if (r.status !== 0) return { code: null, output };
   const last = r.stdout.trim().split("\n").at(-1) ?? "";
   try {
@@ -128,6 +129,8 @@ export function parseWardVmRun(r: Exited): LockRun {
     if (Number.isInteger(j.code) && typeof j.cycles === "string" && /^\d+$/.test(j.cycles)) {
       return { code: j.code as number, cycles: BigInt(j.cycles), output };
     }
+    // The reason the lock did not run, in words, not the JSON line that carried it.
+    if (j.code === null && typeof j.error === "string") return { code: null, output: [plain(r.stderr.trim()), j.error].filter(Boolean).join("\n") };
     return { code: null, output };
   } catch {
     return { code: null, output };

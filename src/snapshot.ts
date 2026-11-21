@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
-import { RPC_TIMEOUT_MS, jsonRpc } from "./verify.ts";
+import { RPC_TIMEOUT_MS, indexerReaches, jsonRpc } from "./verify.ts";
 
 /** Where one cell stood at the snapshot block. */
 export interface DepAtSnapshot {
@@ -44,6 +44,7 @@ export async function depsLiveAt(rpcUrl: string, cellDeps: ccc.OutPointLike[], s
   const at = ccc.numFrom(snapshot);
   const tip = BigInt((await rpc("get_tip_header", [])).number);
   if (at > tip) throw new Error(`snapshot block ${at} is past the tip ${tip}`);
+  await indexerReaches(rpc, at);
   const maxPages = options.maxPages ?? 20;
 
   const deps: DepAtSnapshot[] = [];
