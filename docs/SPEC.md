@@ -52,7 +52,7 @@ The first line follows the shape of EIP-4361 (Sign-In with Ethereum) so it reads
 
 ## 4. Proof transaction
 
-The only input points at an out point that no transaction can create.
+In form 1, the only input points at an out point that no transaction can create. Form 2, below, names a synthetic previous transaction instead.
 
 ```text
 TAG = "CKB lock proof v1\n"                    (18 bytes, ASCII, ends with LF)
@@ -86,6 +86,31 @@ Signing. The wallet signs as it would any transaction spending a cell under the 
 
 Earlier form. Until 2026-11-18 the output was under `{ code_hash: 0x00 * 32, hash_type: "data", args: 0x }`, its capacity was (41 + n) CKB, and TAG was `CKB lock proof v0\n`. It is no longer a proof: the verifier refuses such a transaction as not the template, before the lock runs, also when the key did sign it (`tests/version.test.ts`). Every vector in the appendix was signed again in the current form, the last two on 2026-11-19.
 
+### Form 2: a synthetic previous transaction
+
+Some signers check each input against the transaction its `tx_hash` names, and refuse form 1: no transaction hashes to P, and none can. Form 2 changes only the input, so those signers can follow it. Form 1 stays valid; a proof is in one form or the other.
+
+```text
+TAG2 = "CKB lock proof v2
+"                   (18 bytes, ASCII, ends with LF)
+D    = TAG2 || lock hash || message            (lock hash as 32 raw bytes, message as UTF-8)
+PREV = { version 0, cell_deps [], header_deps [], inputs [],
+         outputs      [ { capacity u64::MAX, lock L, no type },
+                        { capacity (8 + s + |D|) * 10^8, lock L, no type } ],
+         outputs_data [ 0x, D ], witnesses [] }
+input.previous_output = { tx_hash: hash(PREV), index: 0 }
+```
+
+Everything else in the proof transaction is as in form 1: version 0, the since and the deps the wallet sets, one output under the claimed lock with the message as its data, one witness. The verifier resolves the input to the same cell as in form 1, which is output 0 of PREV: capacity u64::MAX, the claimed lock, no type, no data. A lock that reads its input cell sees the same bytes in both forms.
+
+- **PREV has no inputs**, so no node accepts it (measured: `test_tx_pool_accept` refuses it as empty), and the proof's input names a transaction that is not on chain (`Unknown(OutPoint(...))`, as in form 1). Nothing in either can be committed.
+- **hash(PREV) commits to the tag, the lock and the message**, as P does in form 1. Another lock or message gives another PREV.
+- **Output 1's capacity is written out**, the capacity its data occupies. A parser may raise a lower value to that (CCC does), and two implementations must hash the same bytes.
+- **PREV is not sent anywhere.** The host gives it to a signer that asks for the transaction an input names. A signer that checks it finds output 0 equal to the cell the host claims, and the hash equal to the input's.
+- **The forms cannot be mixed.** The signature covers the transaction hash, which differs in the input: a form 1 witness does not open the form 2 template of the same message, nor the reverse (tested with every lock of section 13).
+
+The verifier builds the template in both forms and accepts when T's hash equals one of them. Probe (b) of step 12 uses the same form as T. Wallets read both (section 10).
+
 ## 5. Verifier algorithm
 
 Input: the claimed lock L, the message M, the signed transaction T, and the platform's expectation E: the exact message it issued for this nonce, its own domain, the account, the nonce, the chain's genesis hash from its config, and the age window. Every field of E is required. The verifier has a node RPC for its chain and a CKB-VM runner. Any refusal ends the check. Node errors mean "could not verify", not "refused". Steps 1 to 7 read nothing from the chain.
@@ -97,12 +122,12 @@ Input: the claimed lock L, the message M, the signed transaction T, and the plat
 4. Refuse unless the lock hash line equals the lock hash of L. Refuse when L is an Omnilock with the administrator flag (section 6, rule 6).
 5. Refuse unless the domain, account, nonce and chain lines equal E's, `now - issued at` is within E's window, and `issued at` is not more than 60 seconds ahead of `now`.
 6. Refuse unless T has exactly one witness, T's serialized size in a block (its bytes plus 4) is at most 597,000, the witness is at most 65,536 bytes, T lists at most 16 cell deps with no out point twice, and at most 8 header deps (section 7).
-7. Build the template of section 4 from (L, M), copy T's cell deps, header deps and the input's `since` into it, and refuse unless its transaction hash equals T's. The transaction hash covers every field but the witnesses, so this one comparison checks every value in section 4. Cell deps, header deps and `since` are the prover's to set, like the witness: they let a lock that reads them run, and cannot forge control, since the out point and the output stay pinned (rule 2) and the signature over the hash is still required.
+7. Build the template of section 4 from (L, M), copy T's cell deps, header deps and the input's `since` into it, and refuse unless its transaction hash equals T's, in form 1 or in form 2 (section 4). The transaction hash covers every field but the witnesses, so this one comparison checks every value in section 4. Cell deps, header deps and `since` are the prover's to set, like the witness: they let a lock that reads them run, and cannot forge control, since the out point and the output stay pinned (rule 2) and the signature over the hash is still required.
 8. Claim the nonce (section 9, rule 3). Refuse when it was already used.
 9. Refuse unless the node's genesis hash (`get_block_hash(0)`) equals E's chain.
 10. Read every cell dep of T from the node as a live cell with data. For each dep group, read the member count from its data (an `OutPointVec`: a 4 byte count, then 36 bytes per out point). Refuse when the data is not that shape, or when all groups together list more than 32 cells, before reading any member. Then read each member not already read, as a live cell. Refuse when any cell is not live. Read each header dep of T live from the node, by block hash, each hash once; refuse when a header is unknown. Each read has a timeout.
 11. Run the lock script group of input 0 in CKB-VM with T, the resolved input, the resolved deps and the resolved headers, under a cycle limit. Refuse unless the lock exits 0.
-12. Probe for exclusive control (section 6, rule 4). Run the lock again on (a) T with its witness replaced by an empty one, and (b) the template of M', which is M with the nonce replaced by a fresh random value, with T's cell deps and T's witness. Refuse when either exits 0.
+12. Probe for exclusive control (section 6, rule 4). Run the lock again on (a) T with its witness replaced by an empty one, and (b) the template of M' in the same form as T, where M' is M with the nonce replaced by a fresh random value, with T's cell deps and T's witness. Refuse when either exits 0.
 13. Accept, and return the out points read in step 10. The binding records them (section 9, rule 8).
 
 ## 6. Safety rules
@@ -180,7 +205,7 @@ A verifier only says that a lock accepted one transaction. The rules below are w
 
 A proof is a transaction. A wallet that shows it as one shows an input that does not exist, a u64::MAX amount, and an output holding the message, and the domain line then protects a user only if they read the output data.
 
-Wallets SHOULD detect the proof shape: exactly one input, at index 0xffffffff, whose tx hash equals ckbhash(TAG || the wallet's lock hash || the message in the only output), and exactly one output, under that lock. `readProof(tx, lock)` in the reference code does this. A wallet that detects it SHOULD show a sign-in request, not a transfer: the domain next to the origin of the site asking (and a warning when they differ), the account, and the chain. It SHOULD NOT show the u64::MAX capacity as an amount being sent: nothing leaves the account.
+Wallets SHOULD detect the proof shape: exactly one input and exactly one output, under that lock, and the input is form 1 (index 0xffffffff, tx hash equal to ckbhash(TAG || the wallet's lock hash || the message in the only output)) or form 2 (index 0, tx hash equal to the hash of the synthetic previous transaction of section 4). `readProof(tx, lock)` in the reference code does this. A wallet that detects it SHOULD show a sign-in request, not a transfer: the domain next to the origin of the site asking (and a warning when they differ), the account, and the chain. It SHOULD NOT show the u64::MAX capacity as an amount being sent: nothing leaves the account.
 
 ## 11. VM and consensus
 
@@ -239,6 +264,25 @@ All on testnet unless the row says MAINNET, under the v1 rules (input at u64::MA
 
 PW-lock and the quantum-resistant lock are most of the Nervos DAO depositors that a secp256k1 binding cannot count (926 and 5 of 1,132 at mainnet block 20,942,448). For PW-lock, CCC's `SignerEvm` lists an EVM wallet's PW-lock address next to its Omnilock one, so a site built on CCC can ask MetaMask for either. The quantum-resistant lock's message covers the input cells, so its wallet has to sign over the input as the verifier resolves it (capacity u64::MAX), a cell that is not on chain. Quantum Purse was not tested.
 
+### Form 2
+
+The software key locks above, signed again in form 2 on 2026-11-22 with fresh random keys and the signers CCC provides for them, all accepted with both probes on. Each is in `tests/vectors-v2/` and replayed by `tests/proof-v2.test.ts` and by the Rust crate. A form 1 witness is refused on the form 2 template of the same message and the reverse. JoyID and the Cellula smart accounts need a passkey and a Config Cell and have no form 2 proof yet. The quantum-resistant lock signs over the input cells, and form 2 gives it the same input cell, so its proof is accepted.
+
+| Lock | In repo | Result | Controls, refused |
+| --- | --- | --- | --- |
+| anyone-can-pay | `anyone-can-pay.json` | accepted | flipped signature bit -31; another message -31; wrongKey -31, noSignature -2 |
+| PW-lock (Portal Wallet), mainnet (mainnet cell deps) | `mainnet-pw-lock.json` | accepted | flipped signature bit -11; another message -31; wrongKey -31 |
+| Quantum-resistant lock (Quantum Purse), mainnet (mainnet cell deps) | `mainnet-quantum-lock.json` | accepted | flipped signature bit 107; another message 107; wrongKey 105 |
+| secp256k1 (mainnet) (mainnet cell deps) | `mainnet-secp256k1.json` | accepted | flipped signature bit -11; another message -31; wrongKey -31 |
+| multisig 2-of-3 | `multisig.json` | accepted | flipped signature bit -52; another message -52; oneSignature -11, sameKeyTwice -52, wrongKey -52 |
+| Nostr lock | `nostr.json` | accepted | flipped signature bit 18; another message 11; wrongKey 26 |
+| Omnilock, Bitcoin mode (UniSat, OKX) | `omnilock-bitcoin.json` | accepted | flipped signature bit -31; another message -31; wrongKey -31 |
+| Omnilock, Dogecoin mode | `omnilock-doge.json` | accepted | flipped signature bit -31; another message -31; wrongKey -31 |
+| Omnilock, Ethereum mode (MetaMask) | `omnilock-ethereum.json` | accepted | flipped signature bit -31; another message -31; wrongKey -31 |
+| PW-lock (Portal Wallet) | `pw-lock.json` | accepted | flipped signature bit -31; another message -31; wrongKey -31 |
+| Quantum-resistant lock (Quantum Purse) | `quantum-lock.json` | accepted | flipped signature bit 107; another message 107; wrongKey 105 |
+| secp256k1 | `secp256k1.json` | accepted | flipped signature bit -11; another message -31; wrongKey -31 |
+
 ## 14. Rejected alternatives
 
 ### Variant B: a real input that cannot be spent yet
@@ -253,7 +297,7 @@ The v0 draft had a second template for wallets that look inputs up on chain: a l
 
 ## Appendix: test vectors
 
-Each vector below is also a JSON file in `tests/vectors/`. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points (V9, V11, V16 and V17: mainnet), and every vector is valid only while they stay live. V1 to V9 and V12 to V17 were signed on 2026-11-18 in the current form of the proof, and their expected results are from ckb-debugger 1.1.1 with deps read that day. V10 and V11 were signed on 2026-11-19, with deps read that day. Every file says `"version": 1`. V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4).
+Each vector below is also a JSON file in `tests/vectors/` (form 1). The signed proofs in form 2 are in `tests/vectors-v2/`, with the same fields and `"version": 2`; they are not repeated here. Transactions are in CCC's JSON form (camelCase); JSON RPC uses snake_case. Cell deps are testnet out points (V9, V11, V16 and V17: mainnet), and every vector is valid only while they stay live. V1 to V9 and V12 to V17 were signed on 2026-11-18 in the current form of the proof, and their expected results are from ckb-debugger 1.1.1 with deps read that day. V10 and V11 were signed on 2026-11-19, with deps read that day. Every file says `"version": 1`. V5 to V8 give the signed transaction in their file only. Exit codes are the lock's own; for V5 to V8 the name of each code in the lock's source is given where it explains the refusal. "Template check" means step 7 of section 5. The verifier resolves the input at capacity u64::MAX (section 4).
 
 ### V1. secp256k1
 

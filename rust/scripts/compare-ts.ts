@@ -11,7 +11,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ccc } from "@ckb-ccc/core";
-import { message, parseMessage, proofTemplate, tipEpoch, verify, wardVm } from "../../src/index.ts";
+import { readdirSync, readFileSync } from "node:fs";
+import { message, parseMessage, proofPrevious, proofTemplate, tipEpoch, verify, wardVm } from "../../src/index.ts";
 import { expectFor, flipWitnessByte, otherMessage, vectors } from "../../tests/helpers.ts";
 
 const DISTRO = process.env.WSL_DISTRO ?? "ChiralSP1";
@@ -33,7 +34,11 @@ const runners = Object.fromEntries(
 ) as Record<Net, ReturnType<typeof wardVm>>;
 
 const cases: Case[] = [];
-for (const v of vectors) {
+// The form 2 proofs of tests/vectors-v2 go through the same changes, with their own: the form 1 index on
+// a form 2 hash, another message's previous transaction, and an output index that names nothing.
+const v2dir = new URL("../../tests/vectors-v2/", import.meta.url);
+const v2vectors = readdirSync(v2dir).filter((f) => f.endsWith(".json")).map((f) => ({ ...JSON.parse(readFileSync(new URL(f, v2dir), "utf8")), file: `v2/${f}` }));
+for (const v of [...(vectors as any[]), ...v2vectors]) {
   const net: Net = v.network === "mainnet" ? "mainnet" : "testnet";
   const tx = ccc.Transaction.from(v.tx);
   const base = { net, lock: v.lock, message: v.message, expect: expectFor(v.message) };
@@ -60,6 +65,12 @@ for (const v of vectors) {
   add("random witness", { tx: edit((t) => (t.witnesses = [ccc.hexFrom(new Uint8Array(33).fill(7))])) });
   const other = ccc.Script.from({ ...ccc.Script.from(v.lock), args: "0x" + "11".repeat(20) });
   add("another lock claimed", { lock: other });
+  if (v.file.startsWith("v2/")) {
+    add("form 1 index on the form 2 hash", { tx: edit((t) => (t.inputs[0].previousOutput.index = 0xffffffffn)) });
+    add("output index 1", { tx: edit((t) => (t.inputs[0].previousOutput.index = 1n)) });
+    add("another message's previous transaction", { tx: edit((t) => (t.inputs[0].previousOutput = ccc.OutPoint.from({ txHash: proofPrevious(v.lock, otherMessage(v.message)).hash(), index: 0 }))) });
+    add("the same witness on the form 1 template", { tx: edit((t) => (t.inputs[0].previousOutput = proofTemplate(v.lock, v.message).inputs[0].previousOutput)) });
+  }
   // The template for that other lock, with the vector's witness: the template passes, the lock refuses.
   const f = parseMessage(v.message);
   const otherText = message({ domain: f.domain, account: f.account, lock: other, chain: f.chain, issuedAt: f.issuedAt, nonce: f.nonce });

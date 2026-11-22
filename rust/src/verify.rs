@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use crate::chain::{tip_epoch, Deadline, Rpc, RpcError, VERIFY_DEADLINE};
 use crate::message::{parse_message, parse_time, MessageFields};
 use crate::run::{consensus_for, run_lock, DepCell, LockRun, DEFAULT_MAX_CYCLES};
-use crate::template::template_like;
+use crate::template::{proof_version_of, template_like};
 use crate::util::{hex, hex_num, unhex};
 
 /// Largest number of cell deps a proof may list (JoyID, the largest measured, uses 6).
@@ -383,9 +383,10 @@ pub fn verify(
     // Cell deps, header deps and the input's since are the prover's to fill, like the witness: they
     // are copied from the submitted transaction, so the hash check does not pin them. The out point
     // and the output stay pinned, so the proof still commits to the lock and the message.
-    if template_like(lock, &proof.message, tx).calc_tx_hash() != tx.calc_tx_hash() {
+    // The proof is in form 1 (an out point that cannot exist) or form 2 (a synthetic previous transaction).
+    let Some(version) = proof_version_of(lock, &proof.message, tx) else {
         return refuse("not the proof template for this lock and message");
-    }
+    };
     let consensus = match &opts.consensus {
         Some(c) => c.clone(),
         None => match consensus_for(&expect.chain) {
@@ -428,7 +429,7 @@ pub fn verify(
         if a.code == Some(0) {
             return Ok(Verdict::Refused(Refused { reason: "no exclusive control: the lock opens with an empty witness".into(), run: Some(a) }));
         }
-        let other = with_witnesses(&template_like(lock, &probe_message(&proof.message), tx), tx.witnesses());
+        let other = with_witnesses(&template_like(lock, &probe_message(&proof.message), tx, version), tx.witnesses());
         let b = run(&other)?;
         if b.code == Some(0) {
             return Ok(Verdict::Refused(Refused { reason: "no exclusive control: the same witness opens another message".into(), run: Some(b) }));

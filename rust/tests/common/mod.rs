@@ -37,9 +37,17 @@ pub struct Vector {
 }
 
 pub fn vectors() -> Vec<Vector> {
-    let dir = repo().join("tests/vectors");
-    let mut files: Vec<_> =
-        std::fs::read_dir(&dir).expect("tests/vectors").map(|e| e.unwrap().path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
+    vectors_in("tests/vectors")
+}
+
+/// The signed proofs of a folder of the repository, in file name order.
+pub fn vectors_in(folder: &str) -> Vec<Vector> {
+    let dir = repo().join(folder);
+    let mut files: Vec<_> = std::fs::read_dir(&dir)
+        .expect("the vector folder")
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .collect();
     files.sort();
     files
         .into_iter()

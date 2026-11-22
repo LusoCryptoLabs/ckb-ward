@@ -55,6 +55,8 @@ The DAO voting example is a full reference platform for the rules of section 9 o
 
 Nodes refuse the proof as `Unknown(OutPoint)`. So a node cannot verify a proof either; the verifier needs a VM.
 
+There are two forms of the proof, and the verifier accepts both. Form 1 names an out point that cannot exist. Form 2 (`proofTemplate(lock, message, { version: 2 })`) names output 0 of a synthetic previous transaction (`proofPrevious`), for signers that check every input against the transaction its hash names. The lock sees the same input cell in both. SPEC section 4 has the details; `tests/vectors-v2/` has 12 signed form 2 proofs.
+
 ## Install
 
 ```sh
