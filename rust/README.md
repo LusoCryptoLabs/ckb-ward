@@ -51,6 +51,7 @@ The wallet side is unchanged: with CCC,
   own client.
 - `ckb_ward::H256` (the type of `Expect::chain`) and `ckb_ward::ckb_types` are re-exported, so a
   caller needs no `ckb-types` of its own.
+- A proof may be in form 1 or form 2 (SPEC section 4). `verify` accepts both; `ProofOptions { version: ProofVersion::V2, .. }` builds a form 2 template and `proof_previous` the synthetic previous transaction a signer may ask for.
 - `deps_live_at` and `dao_weight_at` are the snapshot rules of SPEC section 9, for a platform that
   counts weight from bindings.
 

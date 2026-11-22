@@ -1,5 +1,5 @@
 export { MAX_MESSAGE_BYTES, message, parseMessage, type MessageFields, type MessageInput } from "./message.ts";
-export { PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG, proofOutPoint, proofTemplate, readProof, type ProofOptions } from "./template.ts";
+export { PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG, PROOF_TAG_V2, proofOutPoint, proofPrevious, proofTemplate, proofVersionOf, readProof, type ProofOptions, type ProofVersion } from "./template.ts";
 export {
   CLOCK_SKEW_SECONDS,
   CellDepError,

@@ -65,7 +65,10 @@ pub use chain::{indexer_reaches, tip_epoch, tip_number, Deadline, Rpc, RpcError,
 pub use message::{iso_time, message, parse_message, parse_time, MessageError, MessageFields, MAX_MESSAGE_BYTES};
 pub use run::{consensus_for, LockRun, DEFAULT_MAX_CYCLES, MAINNET_GENESIS, TESTNET_GENESIS};
 pub use snapshot::{deps_live_at, DepAtSnapshot, DepsAtSnapshot};
-pub use template::{proof_input, proof_out_point, proof_template, read_proof, ProofOptions, PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG};
+pub use template::{
+    proof_input, proof_out_point, proof_out_point_in, proof_previous, proof_template, proof_version_of, read_proof, ProofOptions, ProofVersion,
+    PROOF_INDEX, PROOF_INPUT_CAPACITY, PROOF_TAG, PROOF_TAG_V2,
+};
 pub use verify::{
     duplicate_cell_dep, omnilock_admin, verify, verify_json, Accepted, Expect, Proof, Refused, Verdict, VerifyError, VerifyOptions, CLOCK_SKEW,
     MAX_CELL_DEPS, MAX_DEP_GROUP_MEMBERS, MAX_HEADER_DEPS, MAX_TX_BYTES, MAX_WITNESS_BYTES, OMNILOCK_CODE_HASHES,

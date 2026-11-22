@@ -163,3 +163,16 @@ fn a_proof_without_its_lock_code_is_refused_not_an_error() {
     let reason = r.reason().unwrap();
     assert!(reason.starts_with("lock did not run: ") && reason.contains("ScriptNotFound"), "{reason}");
 }
+
+#[test]
+fn the_probes_refuse_in_form_two_as_in_form_one() {
+    let v2 = || ProofOptions { version: ckb_ward::ProofVersion::V2, ..Default::default() };
+    let always = case(elf("alwaysSuccess"), "f2-always", b"", v2());
+    assert_eq!(run(&always, true).reason(), Some("no exclusive control: the lock opens with an empty witness"));
+    assert!(run(&always, false).is_accepted(), "control: probes off, accepted, in form 2");
+    let pass = case(elf("passwordOpen"), "f2-pass", b"open", v2());
+    assert_eq!(run(&pass, true).reason(), Some("no exclusive control: the same witness opens another message"));
+    assert!(run(&pass, false).is_accepted(), "control: probes off, accepted, in form 2");
+    // The form is what the proof's own bytes say: the same case in form 1 reads the same.
+    assert_eq!(ckb_ward::proof_version_of(&pass.proof.lock, &pass.proof.message, &pass.proof.tx), Some(ckb_ward::ProofVersion::V2));
+}
